@@ -1,0 +1,14 @@
+.app { padding: 14px; }
+
+.stack { display: flex; flex-direction: column; gap: 8px; }
+
+.field-chip { width: 92px; justify-content: flex-start; }
+
+.status-box .status-value { flex: 1; }
+.status-value.over { color: var(--hp-dead); }
+
+.anchor-btn { padding: 4px 10px; margin-left: auto; }
+
+.action-row { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+
+.btn:disabled { opacity: 0.45; cursor: default; }

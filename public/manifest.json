@@ -1,0 +1,16 @@
+{
+  "name": "Hex Grid Number",
+  "version": "0.1.0",
+  "manifest": 1,
+  "description": "Numbers the hexes on a hex grid (AA.01 style) so hexcrawl maps can be keyed.",
+  "author": "Zemaria",
+  "icon": "/icon.svg",
+  "action": {
+    "title": "Hex Grid Number",
+    "icon": "/icon.svg",
+    "popover": "/index.html",
+    "width": 300,
+    "height": 470
+  },
+  "background_url": "/background.html"
+}

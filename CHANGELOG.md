@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.7 - Smaller handles
+The rotate and resize buttons on the sample are smaller and sit farther from the text.
+
 ## 0.7.6 - Snug sample frame
 The sample's frame stays snug around the text, and Left or Right moves the text instead; label boxes are sized a bit tighter.
 

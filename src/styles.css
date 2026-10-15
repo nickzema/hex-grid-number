@@ -123,14 +123,14 @@ button { cursor: pointer; }
 .preview-input.invalid { text-decoration: underline wavy var(--danger); }
 .preview-frame { position: absolute; inset: -2px; border: 1.5px solid #d9423b; pointer-events: none; }
 .handle {
-  position: absolute; width: 26px; height: 26px; border-radius: 50%;
+  position: absolute; width: 20px; height: 20px; border-radius: 50%;
   background: rgba(54, 58, 72, 0.96); color: #fff; display: flex; align-items: center; justify-content: center;
   touch-action: none; box-shadow: 0 0 0 1px rgba(255,255,255,0.12);
 }
-.handle.rotate { left: 50%; top: -32px; margin-left: -13px; cursor: grab; }
-.handle.resize { top: 50%; margin-top: -13px; cursor: ew-resize; }
-.handle.resize.left { left: -15px; }
-.handle.resize.right { right: -15px; }
+.handle.rotate { left: 50%; top: -32px; margin-left: -10px; cursor: grab; }
+.handle.resize { top: 50%; margin-top: -10px; cursor: ew-resize; }
+.handle.resize.left { left: -32px; }
+.handle.resize.right { right: -32px; }
 
 /* tooltips (data-tip) */
 [data-tip] { position: relative; }

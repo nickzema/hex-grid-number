@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.0 - Ring and Spiral
+Grid, Ring (a letter per ring) and Spiral numbering, bigger interface text in a 460 square, and real fonts in the preview.
+
 ## 0.4.0 - Owlbear look
 Dark Owlbear-style panel laid out like the sketch, with a bigger sample hex and the Zemaria styling removed.
 

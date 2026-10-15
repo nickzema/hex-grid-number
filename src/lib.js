@@ -8,8 +8,14 @@ export const TOOL_ID = `${ID}/tool`;
 export const MODE_READ = `${ID}/read`;
 export const MAX_HEXES = 2500;
 
+export const MODES = ["GRID", "RING", "SPIRAL"];
+
 export const DEFAULTS = {
-  anchor: null, // center of the first hex, in scene coordinates
+  anchor: null, // center of the first hex (the center hex in RING and SPIRAL), in scene coordinates
+  mode: "GRID", // GRID: columns and rows | RING: the letter is the ring | SPIRAL: one number spiraling out
+  lastRing: "D", // RING: the last ring to number, in the template's style (a letter, or a number for 01.01)
+  spiralTemplate: "1", // SPIRAL: the center hex's number; its shape sets the padding
+  spiralCount: 61, // SPIRAL: how many hexes to number
   cols: 20,
   rows: 20,
   template: "A.01", // the first hex's key; its shape sets the style of every key
@@ -104,6 +110,16 @@ export function parseTemplate(text) {
   };
 }
 
+// SPIRAL numbers: "1", "0", "001", "-3".
+export function parseSpiral(text) {
+  const m = /^(-?\d+)$/.exec(String(text ?? "").trim());
+  if (!m) return null;
+  return { start: parseInt(m[1], 10), width: m[1].replace("-", "").length };
+}
+
+export const parseFor = (mode, text) => (mode === "SPIRAL" ? parseSpiral(text) : parseTemplate(text));
+export const templateFor = (cfg) => (cfg.mode === "SPIRAL" ? cfg.spiralTemplate : cfg.template);
+
 let parsedFor = null;
 let parsed = null;
 function templateOf(cfg) {
@@ -132,6 +148,32 @@ export function hexKey(cfg, c, r) {
   return `${col}${p.sep}${row}`;
 }
 
+// RING: how many rings go past the center, from the "last ring" box.
+export function ringInfo(cfg) {
+  const p = parseTemplate(cfg.template) || parseTemplate(DEFAULTS.template);
+  const t = String(cfg.lastRing ?? "").trim();
+  let last;
+  if (p.alpha) {
+    if (!/^[A-Za-z]+$/.test(t)) return { error: "Last ring needs letters, like D." };
+    last = colIndex(t);
+  } else {
+    if (!/^-?\d+$/.test(t)) return { error: "Last ring needs a number." };
+    last = parseInt(t, 10);
+  }
+  const rings = last - p.colStart;
+  if (rings < 0) return { error: "Last ring comes before the first ring." };
+  return { rings, total: 1 + 3 * rings * (rings + 1) };
+}
+
+export function hexCount(cfg) {
+  if (cfg.mode === "RING") {
+    const info = ringInfo(cfg);
+    return info.error ? 0 : info.total;
+  }
+  if (cfg.mode === "SPIRAL") return cfg.spiralCount;
+  return cfg.cols * cfg.rows;
+}
+
 /* ---------- geometry ---------- */
 
 export function isHex(type) {
@@ -148,16 +190,60 @@ function cellOffset(type, dpi, shift, c, r) {
   return { x: c * dpi * SQRT3_2, y: r * dpi + (mod2(c) ? (shift * dpi) / 2 : 0) };
 }
 
-// Inverse of cellOffset for a point already snapped to a hex center.
-function cellFromOffset(type, dpi, shift, dx, dy) {
-  if (type === "HEX_VERTICAL") {
-    const r = Math.round(dy / (dpi * SQRT3_2));
-    const c = Math.round((dx - (mod2(r) ? (shift * dpi) / 2 : 0)) / dpi);
-    return { c, r };
+// The six neighbor directions, clockwise from the top (pointy hexes: from the upper right).
+// Every neighbor sits exactly one dpi away.
+function neighborDirs(type, dpi) {
+  const angles = type === "HEX_VERTICAL" ? [-60, 0, 60, 120, 180, 240] : [-90, -30, 30, 90, 150, 210];
+  return angles.map((a) => ({ x: Math.cos((a * Math.PI) / 180) * dpi, y: Math.sin((a * Math.PI) / 180) * dpi }));
+}
+
+// Ring n (n >= 1) has 6n hexes, starting at the top and going clockwise.
+function ringOffsets(n, dirs) {
+  if (n === 0) return [{ x: 0, y: 0 }];
+  const out = [];
+  for (let k = 0; k < 6; k++) {
+    const a = dirs[k];
+    const step = dirs[(k + 2) % 6];
+    for (let i = 0; i < n; i++) out.push({ x: n * a.x + i * step.x, y: n * a.y + i * step.y });
   }
-  const c = Math.round(dx / (dpi * SQRT3_2));
-  const r = Math.round((dy - (mod2(c) ? (shift * dpi) / 2 : 0)) / dpi);
-  return { c, r };
+  return out;
+}
+
+// Every keyed hex as { key, x, y }, x/y measured from the anchor hex center.
+export function layout(cfg, type, dpi) {
+  const out = [];
+  if (cfg.mode === "RING") {
+    const info = ringInfo(cfg);
+    if (info.error) return { error: info.error };
+    const p = parseTemplate(cfg.template) || parseTemplate(DEFAULTS.template);
+    const dirs = neighborDirs(type, dpi);
+    for (let ring = 0; ring <= info.rings; ring++) {
+      let col = p.alpha ? colName(p.colStart + ring) : num(p.colStart + ring, p.colWidth);
+      if (p.alpha && p.lower) col = col.toLowerCase();
+      ringOffsets(ring, dirs).forEach((o, i) => out.push({ key: `${col}${p.sep}${num(p.rowStart + i, p.rowWidth)}`, x: o.x, y: o.y }));
+    }
+  } else if (cfg.mode === "SPIRAL") {
+    const sp = parseSpiral(cfg.spiralTemplate) || { start: 1, width: 1 };
+    const dirs = neighborDirs(type, dpi);
+    for (let ring = 0; out.length < cfg.spiralCount; ring++) {
+      let offs = ringOffsets(ring, dirs);
+      // From ring 2 on, start a little before the top so each ring picks up right next to
+      // where the last one ended and the spiral never jumps.
+      if (ring >= 2) offs = [...offs.slice(5 * ring + 1), ...offs.slice(0, 5 * ring + 1)];
+      for (const o of offs) {
+        if (out.length >= cfg.spiralCount) break;
+        out.push({ key: num(sp.start + out.length, sp.width), x: o.x, y: o.y });
+      }
+    }
+  } else {
+    for (let r = 0; r < cfg.rows; r++) {
+      for (let c = 0; c < cfg.cols; c++) {
+        const o = cellOffset(type, dpi, cfg.shift, c, r);
+        out.push({ key: hexKey(cfg, c, r), x: o.x, y: o.y });
+      }
+    }
+  }
+  return { items: out };
 }
 
 async function gridInfo() {
@@ -188,9 +274,14 @@ export async function keyAt(position) {
   const { type, dpi } = await gridInfo();
   if (!isHex(type)) return null;
   const center = await snapToHex(position);
-  const { c, r } = cellFromOffset(type, dpi, cfg.shift, center.x - cfg.anchor.x, center.y - cfg.anchor.y);
-  if (c < 0 || r < 0 || c >= cfg.cols || r >= cfg.rows) return null;
-  return hexKey(cfg, c, r);
+  const lay = layout(cfg, type, dpi);
+  if (lay.error) return null;
+  const dx = center.x - cfg.anchor.x;
+  const dy = center.y - cfg.anchor.y;
+  for (const h of lay.items) {
+    if (Math.hypot(h.x - dx, h.y - dy) < dpi * 0.4) return h.key;
+  }
+  return null;
 }
 
 /* ---------- labels ---------- */
@@ -260,7 +351,9 @@ async function buildLabels(cfg) {
   if (!cfg.anchor) return { error: "Set the first hex first." };
   const { type, dpi } = await gridInfo();
   if (!isHex(type)) return { error: "Scene grid is not a hex grid." };
-  if (cfg.cols * cfg.rows > MAX_HEXES) return { error: `Too many hexes (max ${MAX_HEXES}).` };
+  if (hexCount(cfg) > MAX_HEXES) return { error: `Too many hexes (max ${MAX_HEXES}).` };
+  const lay = layout(cfg, type, dpi);
+  if (lay.error) return { error: lay.error };
 
   const font = fontFor(cfg);
   const fontPx = dpi * cfg.textSize;
@@ -271,13 +364,12 @@ async function buildLabels(cfg) {
   const cal = await getCalib();
 
   const items = [];
-  for (let r = 0; r < cfg.rows; r++) {
-    for (let c = 0; c < cfg.cols; c++) {
-      const key = hexKey(cfg, c, r);
+  for (const hex of lay.items) {
+    {
+      const key = hex.key;
       const w = key.length * fontPx * 0.8 + 8;
-      const off = cellOffset(type, dpi, cfg.shift, c, r);
-      const cx = cfg.anchor.x + off.x + cfg.ox * dpi;
-      const cy = cfg.anchor.y + off.y + cfg.oy * dpi;
+      const cx = cfg.anchor.x + hex.x + cfg.ox * dpi;
+      const cy = cfg.anchor.y + hex.y + cfg.oy * dpi;
       // Place the item's position so the box center lands on (cx, cy).
       const kx = cal.kx * w;
       const ky = cal.ky * h;

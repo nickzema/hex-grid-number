@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { fontFor } from "./fonts.js";
-import { parseTemplate } from "./lib.js";
+import { parseFor } from "./lib.js";
 
 // The preview hex is drawn D px tall (flat-top) or wide (pointy-top), the same
 // way the grid's dpi measures a hex. Label offset and size are stored in
 // hex sizes, so what you see here is what lands on every hex.
-export const D = 150;
-const W = 204;
-const H = 200;
+export const D = 168;
+const W = 216;
+const H = 222;
 const SQRT3 = Math.sqrt(3);
 const SNAP = 6; // px: how close the label has to be to a snap spot
 
@@ -74,7 +74,7 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
   const fontPx = v.textSize * D;
   const cx = W / 2 + v.ox * D;
   const cy = H / 2 + v.oy * D;
-  const valid = !!parseTemplate(text);
+  const valid = !!parseFor(cfg.mode, text);
   const hexHalf = flat ? D / 2 : D / SQRT3;
 
   const setLiveBoth = (patch) => {
@@ -171,7 +171,7 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
 
   const commit = () => {
     const t = text.trim();
-    if (parseTemplate(t)) {
+    if (parseFor(cfg.mode, t)) {
       if (t !== cfg.template) onTemplate(t);
       setText(t);
     } else {
@@ -208,7 +208,7 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
     color: v.fillColor,
     WebkitTextStroke: strokePx > 0 ? `${strokePx}px ${v.strokeColor}` : "0",
     paintOrder: "stroke fill",
-    lineHeight: 1.3,
+    lineHeight: 1.4,
   };
 
   const handle = (kind, extra) => ({

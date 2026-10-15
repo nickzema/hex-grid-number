@@ -63,9 +63,9 @@ export default function HelpButton({ title, steps }) {
 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const calloutWidth = 250;
+  const calloutWidth = 280;
   // Below the target if it fits, else above, else docked at the bottom of the popover.
-  const need = 160;
+  const need = 170;
   const place = !rect ? "center" : vh - rect.bottom > need ? "below" : rect.top > need ? "above" : "dock";
   const placeBelow = place !== "above";
   const left = rect

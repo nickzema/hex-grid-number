@@ -2,15 +2,15 @@
 // `obr` is the fontFamily value written to the label items.
 // Confirmed: Rounded (Roboto, the SDK default) and Marker (Permanent Marker). The rest are
 // best guesses. Hover the font box with an Owlbear text item selected to see its real name.
-// `css` is only for the popover preview and the dropdown, so it is approximate.
+// `css` is for the popover preview and the dropdown; index.html loads the same Google fonts.
 export const FONTS = [
-  { name: "Rounded", obr: "Roboto", css: "ui-rounded, 'SF Pro Rounded', 'Varela Round', system-ui, sans-serif" },
-  { name: "Fantasy", obr: "Metamorphous", css: "fantasy, Papyrus, 'Luminari', serif" },
-  { name: "Marker", obr: "Permanent Marker", css: "'Permanent Marker', 'Marker Felt', 'Chalkboard SE', cursive" },
-  { name: "Script", obr: "Kaushan Script", css: "'Snell Roundhand', 'Brush Script MT', cursive" },
-  { name: "Cursive", obr: "Dancing Script", css: "'Apple Chancery', 'Segoe Script', cursive" },
-  { name: "Mono", obr: "Roboto Mono", css: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace" },
-  { name: "Serif", obr: "Roboto Slab", css: "'Times New Roman', Georgia, serif" },
+  { name: "Rounded", obr: "Roboto", css: "Roboto, system-ui, sans-serif" },
+  { name: "Fantasy", obr: "Metamorphous", css: "'Metamorphous', fantasy, serif" },
+  { name: "Marker", obr: "Permanent Marker", css: "'Permanent Marker', cursive" },
+  { name: "Script", obr: "Kaushan Script", css: "'Kaushan Script', cursive" },
+  { name: "Cursive", obr: "Dancing Script", css: "'Dancing Script', cursive" },
+  { name: "Mono", obr: "Roboto Mono", css: "'Roboto Mono', monospace" },
+  { name: "Serif", obr: "Roboto Slab", css: "'Roboto Slab', serif" },
 ];
 
 export const DEFAULT_FONT = "Rounded";

@@ -5,7 +5,11 @@ import {
   DEFAULTS,
   LABEL_KEY,
   MAX_HEXES,
+  MODES,
   SEPARATORS,
+  hexCount,
+  ringInfo,
+  templateFor,
   loadConfig,
   normalizeConfig,
   saveConfig,
@@ -23,33 +27,36 @@ import ColorPanel from "./ColorPanel.jsx";
 import HelpButton from "./HelpButton.jsx";
 
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48];
-const MODES = ["SHOW", "HIDE", "OFF"];
+const WHO = ["SHOW", "HIDE", "OFF"];
+const MODE_NAMES = { GRID: "Grid", RING: "Ring", SPIRAL: "Spiral" };
 
 const TOUR = [
-  { selector: '[data-tour="set"]', text: "Select a token on the hex you want numbered first, then press Set. Numbers count right and down from there." },
-  { selector: '[data-tour="sample"]', text: "Click the text to type the first hex's number, like A.01, 01.01 or -7.-3. Drag it to move it." },
+  { selector: '[data-tour="set"]', text: "Select a token on the first hex (the center, in Ring and Spiral), then press Set." },
+  { selector: '[data-tour="mode"]', text: "Grid counts columns and rows. Ring uses a letter per ring around the center. Spiral is one number winding out from the center." },
+  { selector: '[data-tour="sample"]', text: "Click the text to type the first hex's number, like A.01, 01.01 or -7.-3 (Spiral: 1). Drag it to move it." },
   { selector: '[data-tour="format"]', text: "Fill, border, font and size apply to every hex. Click the sample text for round handles to rotate or resize it." },
   { selector: '[data-tour="players"]', text: "SHOW: everyone sees them. HIDE: players can turn them on for themselves, if they have the extension. OFF: players get nothing." },
   { selector: '[data-tour="eye"]', text: "Hides the numbers just for you in HIDE and OFF. In SHOW they're shared, so it can't." },
 ];
 
-function Row({ label, children, tour }) {
+function Row({ label, children, tour, pin }) {
   return (
-    <div className="row" data-tour={tour}>
+    <div className={`row ${pin ? "pin" : ""}`} data-tour={tour}>
       <span className="row-label">{label}</span>
       <div className="row-val">{children}</div>
     </div>
   );
 }
 
-function Field({ label, value, onCommit }) {
+function Field({ label, value, onCommit, numeric = true }) {
   const [text, setText] = useState(String(value));
   useEffect(() => setText(String(value)), [value]);
   return (
     <Row label={label}>
       <input
         value={text}
-        inputMode="numeric"
+        inputMode={numeric ? "numeric" : "text"}
+        spellCheck={false}
         onChange={(e) => setText(e.target.value)}
         onBlur={() => onCommit(text)}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
@@ -185,8 +192,16 @@ export default function App() {
   }
 
   const flat = gridType !== "HEX_VERTICAL";
-  const total = cfg.cols * cfg.rows;
+  const total = hexCount(cfg);
   const tooMany = total > MAX_HEXES;
+  const ring = cfg.mode === "RING" ? ringInfo(cfg) : null;
+  const summary = tooMany
+    ? `${total} hexes is over the max of ${MAX_HEXES}.`
+    : ring && ring.error
+    ? ring.error
+    : `${total} hexes.`;
+  const problem = tooMany || (ring && ring.error);
+  const previewCfg = { ...cfg, template: templateFor(cfg) };
   const shared = cfg.visibility === "SHOW";
 
   const doSet = async () => {
@@ -336,23 +351,45 @@ export default function App() {
 
       <div className="body">
         <div className="stack">
-          <Field label="Columns" value={cfg.cols} onCommit={(v) => update({ cols: clampInt(v, 1, 999, cfg.cols) })} />
-          <Field label="Rows" value={cfg.rows} onCommit={(v) => update({ rows: clampInt(v, 1, 999, cfg.rows) })} />
-
-          <Row label="Offset">
-            <div className="seg-in">
-              <button className={`seg-btn arrow ${cfg.shift === 1 ? "active" : ""}`} data-tip="Second one sits lower" onClick={() => update({ shift: 1 })}>
-                {offsetIcons[0]}
+          <div className="modes" data-tour="mode">
+            {MODES.map((m) => (
+              <button key={m} className={`seg-btn ${cfg.mode === m ? "active" : ""}`} onClick={() => update({ mode: m })}>
+                {MODE_NAMES[m]}
               </button>
-              <button className={`seg-btn arrow ${cfg.shift === -1 ? "active" : ""}`} data-tip="Second one sits higher" onClick={() => update({ shift: -1 })}>
-                {offsetIcons[1]}
-              </button>
-            </div>
-          </Row>
+            ))}
+          </div>
 
-          <Row label="Players" tour="players">
+          {cfg.mode === "GRID" && (
+            <>
+              <Field label="Columns" value={cfg.cols} onCommit={(v) => update({ cols: clampInt(v, 1, 999, cfg.cols) })} />
+              <Field label="Rows" value={cfg.rows} onCommit={(v) => update({ rows: clampInt(v, 1, 999, cfg.rows) })} />
+              <Row label="Offset">
+                <div className="seg-in">
+                  <button className={`seg-btn arrow ${cfg.shift === 1 ? "active" : ""}`} data-tip="Second one sits lower" onClick={() => update({ shift: 1 })}>
+                    {offsetIcons[0]}
+                  </button>
+                  <button className={`seg-btn arrow ${cfg.shift === -1 ? "active" : ""}`} data-tip="Second one sits higher" onClick={() => update({ shift: -1 })}>
+                    {offsetIcons[1]}
+                  </button>
+                </div>
+              </Row>
+            </>
+          )}
+          {cfg.mode === "RING" && (
+            <Field
+              label="Last ring"
+              numeric={false}
+              value={cfg.lastRing}
+              onCommit={(v) => update({ lastRing: String(v).trim() || cfg.lastRing })}
+            />
+          )}
+          {cfg.mode === "SPIRAL" && (
+            <Field label="Hexes" value={cfg.spiralCount} onCommit={(v) => update({ spiralCount: clampInt(v, 1, MAX_HEXES, cfg.spiralCount) })} />
+          )}
+
+          <Row label="Players" tour="players" pin>
             <div className="seg-in">
-              {MODES.map((m) => (
+              {WHO.map((m) => (
                 <button
                   key={m}
                   className={`seg-btn ${cfg.visibility === m ? "active" : ""}`}
@@ -365,22 +402,25 @@ export default function App() {
             </div>
           </Row>
 
-          {tooMany && <div className="caption over">{`${total} hexes is over the max of ${MAX_HEXES}.`}</div>}
         </div>
 
         <Preview
-          cfg={cfg}
+          cfg={previewCfg}
           flat={flat}
           dpi={dpi}
           onChange={(patch) => update(patch)}
-          onTemplate={(template) => update({ template })}
+          onTemplate={(t) => update(cfg.mode === "SPIRAL" ? { spiralTemplate: t } : { template: t })}
           onInvalid={(t) =>
-            setMsg(`"${t}" isn't a key. Use column then row, like A.01 or 01.01. Separators: ${SEPARATORS.trim()} or a space.`)
+            setMsg(
+              cfg.mode === "SPIRAL"
+                ? `"${t}" isn't a number. Use something like 1, 0 or 001.`
+                : `"${t}" isn't a key. Use column then row, like A.01 or 01.01. Separators: ${SEPARATORS.trim()} or a space.`
+            )
           }
         />
       </div>
 
-      {msg && <div className="caption">{msg}</div>}
+      <div className={`caption ${!msg && problem ? "over" : ""}`}>{msg || summary}</div>
 
       {panel && (
         <ColorPanel

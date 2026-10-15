@@ -33,18 +33,25 @@ OBR.onReady(async () => {
     id: MODE_ANCHOR,
     icons: [{ icon: "/anchor.svg", label: "Set First Hex", filter: { activeTools: [TOOL_ID], roles: ["GM"] } }],
     cursors: [{ cursor: "crosshair" }],
+    onActivate: async () => {
+      await OBR.notification.show("Click the hex that should be the first hex.", "INFO");
+    },
     onToolClick: async (_ctx, event) => {
-      const type = await OBR.scene.grid.getType();
-      if (!isHex(type)) {
-        await OBR.notification.show("Scene grid is not a hex grid.", "ERROR");
-        return false;
+      try {
+        const type = await OBR.scene.grid.getType();
+        if (!isHex(type)) {
+          await OBR.notification.show("Scene grid is not a hex grid.", "ERROR");
+          return false;
+        }
+        const center = await snapToHex(event.pointerPosition);
+        const cfg = await loadConfig();
+        const next = { ...cfg, anchor: { x: center.x, y: center.y } };
+        await saveConfig(next);
+        await OBR.notification.show(`First hex set (${hexKey(next, 0, 0)}).`, "SUCCESS");
+        await OBR.tool.activateMode(TOOL_ID, MODE_READ);
+      } catch (e) {
+        await OBR.notification.show(`Set first hex failed: ${e && e.message ? e.message : e}`, "ERROR");
       }
-      const center = await snapToHex(event.pointerPosition);
-      const cfg = await loadConfig();
-      const next = { ...cfg, anchor: { x: center.x, y: center.y } };
-      await saveConfig(next);
-      await OBR.notification.show(`First hex set (${hexKey(next, 0, 0)}).`, "SUCCESS");
-      await OBR.tool.activateMode(TOOL_ID, MODE_READ);
       return false;
     },
   });

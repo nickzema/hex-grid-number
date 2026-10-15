@@ -17,7 +17,7 @@ OBR.onReady(async () => {
     onToolClick: async (_ctx, event) => {
       try {
         const [role, cfg] = await Promise.all([OBR.player.getRole(), loadConfig()]);
-        if (role !== "GM" && !cfg.players) return false;
+        if (role !== "GM" && cfg.visibility !== "ALL") return false;
         if (!cfg.anchor) {
           await OBR.notification.show("No hex numbering set up in this scene.", "WARNING");
           return false;

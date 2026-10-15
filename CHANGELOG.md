@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.0 - Template hex and toolbar
+The popover now shows a preview hex. Type the first hex's key into it (A.01, AA 01, 01.01) and every hex follows that style; separators are , . ; : ' - _ ` / \ | or a space. Drag the label to place it, click it to type, resize or rotate. Toolbar has text color, the seven Owlbear fonts, size, bold and italic. ALL / GM / OFF sets who sees labels. Labels redraw on any change. Set asks before moving the first hex; Reset asks before clearing. Start col, Start row and Size % are gone (the template and resize handle replace them). Adds .gitignore for .DS_Store.
+
 ## 0.1.4 - Label styling
 Columns run A-Z then AA. Start column defaults to A. Adds label font, size and position (top, middle, bottom).
 

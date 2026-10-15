@@ -4,8 +4,6 @@ import {
   CONFIG_KEY,
   DEFAULTS,
   MAX_HEXES,
-  TOOL_ID,
-  MODE_ANCHOR,
   loadConfig,
   saveConfig,
   hexKey,
@@ -72,11 +70,6 @@ export default function App() {
   const total = cfg.cols * cfg.rows;
   const tooMany = total > MAX_HEXES;
 
-  const setAnchor = async () => {
-    await OBR.tool.activateMode(TOOL_ID, MODE_ANCHOR);
-    await OBR.action.close();
-  };
-
   // Set the first hex from a selected token/image sitting on it (no map click needed).
   const useSelected = async () => {
     setMsg("");
@@ -88,7 +81,7 @@ export default function App() {
       }
       const sel = await OBR.player.getSelection();
       if (!sel || sel.length === 0) {
-        setMsg("Select a token on the first hex, then press Use selected.");
+        setMsg("Select a token on the first hex, then press Set.");
         return;
       }
       const bounds = await OBR.scene.items.getItemBounds([sel[0]]);
@@ -134,26 +127,39 @@ export default function App() {
         <div className="status-box">
           <span className="status-label">First hex</span>
           <span className="status-value">{cfg.anchor ? hexKey(cfg, 0, 0) : "Not set"}</span>
-          <button className="btn anchor-btn" onClick={setAnchor}>
+          <button className="btn anchor-btn" onClick={useSelected}>
             {cfg.anchor ? "Reset" : "Set"}
-          </button>
-          <button className="btn anchor-btn second" onClick={useSelected}>
-            Use selected
           </button>
         </div>
 
-        <Field label="Columns" value={cfg.cols} onCommit={(v) => update({ cols: clampInt(v, 1, 676, cfg.cols) })} />
+        <Field label="Columns" value={cfg.cols} onCommit={(v) => update({ cols: clampInt(v, 1, 999, cfg.cols) })} />
         <Field label="Rows" value={cfg.rows} onCommit={(v) => update({ rows: clampInt(v, 1, 999, cfg.rows) })} />
         <Field
           label="Start col"
           value={cfg.startCol}
-          onCommit={(v) => update({ startCol: /^[A-Za-z]{2}$/.test(v.trim()) ? v.trim().toUpperCase() : cfg.startCol })}
+          onCommit={(v) => update({ startCol: /^[A-Za-z]{1,3}$/.test(v.trim()) ? v.trim().toUpperCase() : cfg.startCol })}
         />
         <Field
           label="Start row"
           value={cfg.startRow}
           onCommit={(v) => update({ startRow: clampInt(v, 0, 999, cfg.startRow) })}
         />
+
+        <Field
+          label="Font"
+          value={cfg.fontFamily}
+          onCommit={(v) => update({ fontFamily: v.trim() || cfg.fontFamily })}
+        />
+        <Field label="Size %" value={cfg.fontSize} onCommit={(v) => update({ fontSize: clampInt(v, 5, 80, cfg.fontSize) })} />
+
+        <div className="seg-toggle">
+          <span className="seg-label">Position</span>
+          {["TOP", "MIDDLE", "BOTTOM"].map((p) => (
+            <button key={p} className={`seg-btn ${cfg.labelPos === p ? "active" : ""}`} onClick={() => update({ labelPos: p })}>
+              {p === "TOP" ? "Top" : p === "MIDDLE" ? "Middle" : "Bottom"}
+            </button>
+          ))}
+        </div>
 
         <div className="seg-toggle">
           <span className="seg-label">Offset</span>

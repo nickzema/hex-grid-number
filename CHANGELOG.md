@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4 - Label styling
+Columns run A-Z then AA. Start column defaults to A. Adds label font, size and position (top, middle, bottom).
+
+## 0.1.3 - Single Set button
+Set and Reset now use the selected token. Removed the map-click mode that did nothing.
+
 ## 0.1.2 - First hex from selection
 Adds Use selected to set the first hex from a selected token, plus error messages when setting it fails.
 

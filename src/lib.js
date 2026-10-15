@@ -12,10 +12,13 @@ export const DEFAULTS = {
   anchor: null, // center of the first hex, in scene coordinates
   cols: 20,
   rows: 20,
-  startCol: "AA",
+  startCol: "A",
   startRow: 1,
   shift: 1, // 1: every second column/row sits down/right. -1: up/left
   players: true, // labels visible to players
+  fontFamily: "Roboto",
+  fontSize: 20, // percent of hex width
+  labelPos: "TOP", // TOP | MIDDLE | BOTTOM
 };
 
 const SQRT3_2 = Math.sqrt(3) / 2;
@@ -34,15 +37,24 @@ export async function saveConfig(cfg) {
 
 /* ---------- naming ---------- */
 
+// Spreadsheet-style columns: A..Z, then AA, AB, ... AZ, BA ...
 function colIndex(letters) {
   const s = String(letters || "").toUpperCase();
-  if (!/^[A-Z]{2}$/.test(s)) return 0;
-  return (s.charCodeAt(0) - 65) * 26 + (s.charCodeAt(1) - 65);
+  if (!/^[A-Z]+$/.test(s)) return 0;
+  let n = 0;
+  for (const ch of s) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
 }
 
 function colName(i) {
-  if (i < 0 || i >= 676) return String(i);
-  return String.fromCharCode(65 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26));
+  let n = Math.max(0, i) + 1;
+  let s = "";
+  while (n > 0) {
+    n -= 1;
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26);
+  }
+  return s;
 }
 
 export function hexKey(cfg, c, r) {
@@ -126,19 +138,22 @@ export async function applyLabels(cfg) {
 
   await clearLabels();
 
-  const w = dpi * 0.8;
-  const h = dpi * 0.3;
+  const fontPx = dpi * (cfg.fontSize / 100);
+  const w = dpi * 0.9;
+  const h = fontPx * 1.4;
+  const yShift = cfg.labelPos === "BOTTOM" ? dpi * 0.28 : cfg.labelPos === "MIDDLE" ? 0 : -dpi * 0.28;
   const items = [];
   for (let r = 0; r < cfg.rows; r++) {
     for (let c = 0; c < cfg.cols; c++) {
       const off = cellOffset(type, dpi, cfg.shift, c, r);
       const cx = cfg.anchor.x + off.x;
-      const cy = cfg.anchor.y + off.y - dpi * 0.28;
+      const cy = cfg.anchor.y + off.y + yShift;
       items.push(
         buildText()
           .plainText(hexKey(cfg, c, r))
           .textType("PLAIN")
-          .fontSize(dpi * 0.2)
+          .fontFamily(cfg.fontFamily || "Roboto")
+          .fontSize(fontPx)
           .fontWeight(700)
           .textAlign("CENTER")
           .textAlignVertical("MIDDLE")

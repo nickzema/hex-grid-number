@@ -18,6 +18,8 @@ import {
   clearLabels,
   selectedHexCenter,
   getPersonal,
+  getSavedColors,
+  saveColor,
   setPersonal,
   onPersonalChange,
 } from "./lib.js";
@@ -92,17 +94,9 @@ const clampInt = (v, min, max, fallback) => {
   return Number.isNaN(n) ? fallback : Math.min(max, Math.max(min, n));
 };
 
-const BrandMark = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-    <ellipse cx="12" cy="14" rx="5" ry="6.5" />
-    <circle cx="12" cy="6" r="2.5" />
-    <path d="M12 8v12M7 11L3 9M7 15l-4 1M7 18.5L4 21M17 11l4-2M17 15l4 1M17 18.5l3 2.5M10.5 4L8 1.5M13.5 4L16 1.5" />
-  </svg>
-);
-
 const Footer = () => (
   <div className="brand-footer">
-    <BrandMark />
+    <img src="/zemaria-icon.png" alt="" />
     <span>Another Zemaria product</span>
   </div>
 );
@@ -117,6 +111,8 @@ function Panel() {
   const [ask, setAsk] = useState(null); // { kind: "set" | "reset", text }
   const [panel, setPanel] = useState(null); // null | "fill" | "stroke"
   const [probe, setProbe] = useState("");
+  const [probeColors, setProbeColors] = useState([]);
+  const [savedColors, setSavedColors] = useState(getSavedColors);
   const [personal, setPersonalState] = useState(null);
   const cfgRef = useRef(cfg);
   const timer = useRef(null);
@@ -155,13 +151,23 @@ function Panel() {
       OBR.player.onChange(async (player) => {
         try {
           const ids = player.selection || [];
-          if (ids.length !== 1) return setProbe("");
+          if (ids.length !== 1) {
+            setProbe("");
+            setProbeColors([]);
+            return;
+          }
           const [item] = await OBR.scene.items.getItems(ids);
           if (item && item.type === "TEXT" && !(item.metadata && item.metadata[LABEL_KEY] !== undefined)) {
-            setProbe(item.text.style.fontFamily);
-          } else setProbe("");
+            const st = item.text.style;
+            setProbe(st.fontFamily);
+            setProbeColors([st.fillColor, st.strokeWidth > 0 ? st.strokeColor : null].filter(Boolean));
+          } else {
+            setProbe("");
+            setProbeColors([]);
+          }
         } catch (_) {
           setProbe("");
+          setProbeColors([]);
         }
       })
     );
@@ -171,14 +177,23 @@ function Panel() {
     };
   }, []);
 
-  const quiet = (res) => {
-    if (!res.ok) setMsg(res.error);
-  };
-
   const report = (res) => {
-    if (res.ok) setMsg(`${res.count} labels placed.`);
+    if (res.ok) setMsg(cfgRef.current.mlk ? `${res.count} hexes sent to Map Location Keys.` : `${res.count} labels placed.`);
     else setMsg(res.error);
   };
+
+  // Hidden-label modes only say something when hexes were sent (or something failed).
+  const quiet = (res) => {
+    if (!res.ok) setMsg(res.error);
+    else if (cfgRef.current.mlk) setMsg(`${res.count} hexes sent to Map Location Keys.`);
+  };
+
+  // Messages fade after a few seconds instead of sitting there.
+  useEffect(() => {
+    if (!msg) return undefined;
+    const t = setTimeout(() => setMsg(""), 7000);
+    return () => clearTimeout(t);
+  }, [msg]);
 
   // Save a change. In SHOW mode the shared labels redraw shortly after the last change;
   // in HIDE and OFF each browser redraws its own copy (see background.js).
@@ -491,6 +506,9 @@ function Panel() {
           onColor={(c) => update(panel === "fill" ? { fillColor: c } : { strokeColor: c })}
           onWidth={(w) => update({ strokeWidth: w })}
           onClose={() => setPanel(null)}
+          saved={savedColors}
+          extra={probeColors}
+          onSave={(hex) => setSavedColors(saveColor(hex))}
         />
       )}
     </div>

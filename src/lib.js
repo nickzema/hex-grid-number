@@ -444,6 +444,8 @@ async function place(api, cfg, opts = {}) {
       if (noted) item.metadata[MLK_KEY] = old.meta;
       else if (cfg.mlk) item.metadata[MLK_KEY] = { locationKey: mlkDefault(item.text.plainText), isPlayerEditable: true };
     }
+    // Map Location Keys only looks at TEXT and PROP layer items, so entries live on TEXT.
+    for (const item of items) if (item.metadata[MLK_KEY]) item.layer = "TEXT";
     if (opts.onlyNoted) items = items.filter((i) => i.metadata[MLK_KEY]);
   }
   await clearFrom(api);
@@ -488,6 +490,32 @@ function makeQueue(run) {
 
 export const queueLabels = makeQueue(applyLabels);
 export const queueLocalLabels = makeQueue(applyLocalLabels);
+
+/* ---------- saved colors (this browser only) ---------- */
+
+const COLORS_KEY = `${ID}/colors`;
+let colorsMem = [];
+
+export function getSavedColors() {
+  try {
+    const v = JSON.parse(localStorage.getItem(COLORS_KEY) || "[]");
+    if (Array.isArray(v)) colorsMem = v.filter((c) => /^#[0-9A-F]{6}$/i.test(c)).map((c) => c.toUpperCase());
+  } catch (_) {
+    /* storage unavailable: keep what we have in memory */
+  }
+  return colorsMem;
+}
+
+export function saveColor(hex) {
+  const c = String(hex).toUpperCase();
+  if (!colorsMem.includes(c)) colorsMem = [...colorsMem, c];
+  try {
+    localStorage.setItem(COLORS_KEY, JSON.stringify(colorsMem));
+  } catch (_) {
+    /* storage unavailable */
+  }
+  return colorsMem;
+}
 
 /* ---------- personal show/hide (this browser only) ---------- */
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2 - Spacing, colors and logo
+Owlbear's 15 starting colors with your own saved after them, selected-text colors, the real Zemaria crown-and-sword logo, even spacing in every mode, and the Map Location Keys layer fix.
+
+## 0.7.1 - Map Location Keys fix
+Hexes sent to Map Location Keys now sit on the layer it reads, and status messages fade away.
+
 ## 0.7.0 - Map Location Keys
 Send every hex to Map Location Keys from a header button, Players moved to the bottom of the list, and the extra toolbar tool removed.
 

@@ -1,13 +1,13 @@
 import { useRef, useState } from "react";
 
-// Colors (sampled from Owlbear's own text color panel; white added) and border sizes laid out like its text toolbar:
+// Colors (the 15 Owlbear starts its text color panel with, then your own, then a "+") and border sizes laid out like its text toolbar:
 // border sizes on the left (border panel only), color swatches on the right,
 // and a "+" that opens a custom color picker with a hex box.
 export const SWATCHES = [
-  "#EF9D28", "#5A00F8", "#E9381D", "#E9381B",
-  "#E9C7AC", "#7E2CF9", "#35008B", "#975AF9",
-  "#EA3657", "#6100F8", "#4200F8", "#753FF9",
-  "#17161A", "#7AA5B5", "#FFFFFF",
+  "#3B51F9", "#ED7738", "#EB5749", "#F5D442",
+  "#9D6C2B", "#7C37F9", "#92FE68", "#54931E",
+  "#DE7FFB", "#68D5ED", "#101016", "#1F1F1F",
+  "#505050", "#AAAAAA", "#FFFFFF",
 ];
 
 // Border sizes in scene px. The first is "none".
@@ -136,9 +136,14 @@ function CustomPicker({ start, onApply, onCancel }) {
   );
 }
 
-export default function ColorPanel({ kind, color, width, onColor, onWidth, onClose }) {
+export default function ColorPanel({ kind, color, width, onColor, onWidth, onClose, saved = [], extra = [], onSave }) {
   const [custom, setCustom] = useState(false);
   const current = (color || "").toUpperCase();
+  const colors = [...SWATCHES];
+  for (const c of [...saved, ...extra]) {
+    const u = String(c).toUpperCase();
+    if (/^#[0-9A-F]{6}$/.test(u) && !colors.includes(u)) colors.push(u);
+  }
 
   return (
     <div className="panel-backdrop" onPointerDown={onClose}>
@@ -167,12 +172,13 @@ export default function ColorPanel({ kind, color, width, onColor, onWidth, onClo
             onCancel={() => setCustom(false)}
             onApply={(hex) => {
               onColor(hex);
+              if (onSave) onSave(hex);
               setCustom(false);
             }}
           />
         ) : (
-          <div className="panel-grid">
-            {SWATCHES.map((c) => (
+          <div className="panel-grid colors">
+            {colors.map((c) => (
               <button
                 key={c}
                 className={`cell swatch-cell ${current === c ? "on" : ""}`}

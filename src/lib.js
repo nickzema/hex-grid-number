@@ -30,7 +30,8 @@ export const DEFAULTS = {
   rows: 20,
   template: "A.01", // the first hex's key; its shape sets the style of every key
   shift: 1, // 1: every second column/row sits down/right. -1: up/left
-  visibility: "SHOW", // SHOW: everyone, locked on | HIDE: players can opt in | OFF: players get nothing
+  players: true, // players get a toolbar button to show or hide the numbers for themselves
+  opacity: 1, // how solid the numbers are (0.05 to 1)
   font: DEFAULT_FONT,
   fontCustom: "", // fontFamily copied from a selected Owlbear text item (font: "Custom")
   textSize: 0.2, // fraction of the hex size (grid dpi)
@@ -58,8 +59,10 @@ export function normalizeConfig(raw) {
     cfg.ox = 0;
     cfg.oy = 0;
   }
-  if (cfg.visibility === "ALL") cfg.visibility = "SHOW";
-  else if (cfg.visibility === "GM") cfg.visibility = "OFF";
+  // Older versions had SHOW / HIDE / OFF: SHOW and HIDE became "players can see", OFF became not.
+  if (!raw || raw.players === undefined) cfg.players = !raw || (raw.visibility !== "OFF" && raw.visibility !== "GM");
+  delete cfg.visibility;
+  cfg.opacity = Math.min(1, Math.max(0.05, Number(cfg.opacity) || 1));
   if (raw && raw.fillColor === undefined && raw.color === "light") {
     cfg.fillColor = "#FFFFFF";
     cfg.strokeColor = "#111111";
@@ -407,9 +410,9 @@ async function clearFrom(api) {
   return ids.length;
 }
 
-// Shared labels: real scene items everyone sees (SHOW mode).
+// Shared labels: invisible holders in the scene (they carry the Map Location Keys entries).
 export const clearLabels = () => clearFrom(OBR.scene.items);
-// Private labels: drawn only in this browser (HIDE / OFF modes).
+// Private labels: the numbers people see, drawn only in this browser.
 export const clearLocalLabels = () => clearFrom(OBR.scene.local);
 
 // Where a text item's box sits relative to its `position`, and what it rotates about,
@@ -501,9 +504,9 @@ async function buildLabels(cfg, opts = {}) {
           .textAlign(align)
           .textAlignVertical("MIDDLE")
           .fillColor(cfg.fillColor)
-          .fillOpacity(opts.anchor ? 0 : 1)
+          .fillOpacity(opts.anchor ? 0 : cfg.opacity)
           .strokeColor(cfg.strokeColor)
-          .strokeOpacity(!opts.anchor && cfg.strokeWidth > 0 ? 1 : 0)
+          .strokeOpacity(!opts.anchor && cfg.strokeWidth > 0 ? cfg.opacity : 0)
           .strokeWidth(cfg.strokeWidth)
           .padding(0)
           .width(w)
@@ -545,7 +548,9 @@ const itemKey = (item) => `${item.metadata[LABEL_KEY]}|${(item.text && item.text
 // Keys is simply redrawn when it changes. A label is replaced for good only when its hex or its
 // number stops existing.
 async function planShared(cfg) {
-  const built = await buildLabels(cfg, { anchor: cfg.visibility !== "SHOW" });
+  // Shared labels are always invisible holders (for Map Location Keys). Everyone sees the numbers
+  // through private labels drawn in their own browser, so nobody is forced to look at them.
+  const built = await buildLabels(cfg, { anchor: true });
   if (built.error) return built;
   const existing = await OBR.scene.items.getItems(isLabel);
   const have = new Map();
@@ -748,7 +753,7 @@ try {
   channel = null;
 }
 
-// GMs start with labels on, players start with them off.
+// Everyone starts with the numbers on.
 export function getPersonal(role) {
   if (personalMem !== null) return personalMem;
   try {
@@ -758,7 +763,7 @@ export function getPersonal(role) {
   } catch (_) {
     /* storage unavailable */
   }
-  return role === "GM";
+  return true;
 }
 
 export function setPersonal(on) {
@@ -792,7 +797,7 @@ export function onPersonalChange(cb) {
 
 // Who sees private labels in this browser right now.
 export function wantsLocalLabels(role, cfg, personal) {
-  if (!cfg.anchor || cfg.visibility === "SHOW") return false;
+  if (!cfg.anchor) return false;
   if (role === "GM") return personal;
-  return cfg.visibility === "HIDE" && personal;
+  return !!cfg.players && personal;
 }

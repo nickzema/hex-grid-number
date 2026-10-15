@@ -5,6 +5,7 @@ import {
   loadConfig,
   saveConfig,
   getPersonal,
+  setPersonal,
   onPersonalChange,
   wantsLocalLabels,
   queueLabels,
@@ -17,8 +18,8 @@ import {
   hexKey,
 } from "./lib.js";
 
-// Private labels (HIDE and OFF modes) are drawn in each browser that has the
-// extension installed. SHOW mode uses shared scene items drawn from the popover.
+// Everyone's numbers are private labels drawn in their own browser (this file runs in each
+// browser that has the extension). Nothing visible is shared, so nobody is made to see them.
 let syncTimer = null;
 let lastSig = null;
 function scheduleSync(reset) {
@@ -27,12 +28,52 @@ function scheduleSync(reset) {
   syncTimer = setTimeout(syncLocal, 250);
 }
 
+/* ---------- the players' toolbar button ---------- */
+
+// Players get one button in the toolbar, a hex with a #, that turns their numbers on or off.
+// It exists only while the GM has "Players" ticked, and is never the active tool.
+const TOGGLE_TOOL = `${ID}/toggle`;
+let toggleThere = false;
+
+async function syncToggle(role, cfg, personalOn) {
+  const want = role === "PLAYER" && !!cfg.players;
+  try {
+    if (want && !toggleThere) {
+      toggleThere = true;
+      await OBR.tool.create({
+        id: TOGGLE_TOOL,
+        icons: [
+          { icon: "/icon.svg", label: "Hide hex numbers", filter: { metadata: [{ key: "on", value: true }] } },
+          { icon: "/icon-off.svg", label: "Show hex numbers", filter: { metadata: [{ key: "on", value: false }] } },
+        ],
+        defaultMetadata: { on: personalOn },
+        onClick: async () => {
+          const r = await OBR.player.getRole();
+          setPersonal(!getPersonal(r));
+          scheduleSync();
+          return false; // a toggle, not a tool to switch to
+        },
+      });
+    } else if (!want && toggleThere) {
+      toggleThere = false;
+      await OBR.tool.remove(TOGGLE_TOOL);
+    }
+    if (want) await OBR.tool.setMetadata(TOGGLE_TOOL, { on: personalOn });
+  } catch (_) {
+    /* the toolbar isn't ready; the next sync tries again */
+  }
+}
+
 // Selection and metadata events fire a lot, so only redraw when something
 // that changes the labels is different from the last time.
 async function syncLocal() {
   try {
     if (!(await OBR.scene.isReady())) {
       lastSig = null;
+      if (toggleThere) {
+        toggleThere = false;
+        OBR.tool.remove(TOGGLE_TOOL).catch(() => {});
+      }
       return;
     }
     const [role, cfg, type, dpi] = await Promise.all([
@@ -41,6 +82,7 @@ async function syncLocal() {
       OBR.scene.grid.getType(),
       OBR.scene.grid.getDpi(),
     ]);
+    await syncToggle(role, cfg, getPersonal(role));
     const want = wantsLocalLabels(role, cfg, getPersonal(role));
     const sig = JSON.stringify(want ? [cfg, type, dpi] : null);
     if (sig === lastSig) return;

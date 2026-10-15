@@ -223,6 +223,7 @@ export default function Preview({ cfg, flat, type, lattice, dpi, maxLen = 1, onC
     WebkitTextStroke: strokePx > 0 ? `${strokePx}px ${v.strokeColor}` : "0",
     paintOrder: "stroke fill",
     lineHeight: 1.4,
+    opacity: v.opacity === undefined ? 1 : v.opacity,
   };
   // Left and Right: on the map every label box is as wide as the longest number and the
   // numbers sit against its left or right edge. Here the frame stays snug around the text,

@@ -41,7 +41,6 @@ import StartBox from "./StartBox.jsx";
 
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48];
 const DESIGN = 500;
-const WHO = ["SHOW", "HIDE", "OFF"];
 const MODE_NAMES = { GRID: "Grid", RING: "Ring", SPIRAL: "Spiral" };
 // Changing any of these can change which hexes exist or what they're called.
 const LAYOUT_KEYS = ["mode", "cols", "rows", "shift", "template", "spiralTemplate", "spiralCount", "lastRing", "start", "dir", "anchor"];
@@ -66,8 +65,8 @@ const TOUR = [
   { selector: '[data-tour="mode"]', text: "Grid counts columns and rows. Ring uses a letter per ring around the center. Spiral is one number winding out from the center." },
   { selector: '[data-tour="sample"]', text: "Click the text to type the first hex's number, like A.01, 01.01 or -7.-3 (Spiral: 1). Drag it to move it." },
   { selector: '[data-tour="format"]', text: "Fill, border, font and size apply to every hex. Click the sample text for round handles to rotate or resize it." },
-  { selector: '[data-tour="players"]', text: "SHOW: everyone sees them. HIDE: players can turn them on for themselves, if they have the extension. OFF: players get nothing." },
-  { selector: '[data-tour="eye"]', text: "Hides the numbers just for you in HIDE and OFF. In SHOW they're shared, so it can't." },
+  { selector: '[data-tour="players"]', text: "Tick Players and they get a hex-and-# button in the toolbar to show or hide the numbers for themselves, if they have the extension. Untick and they get nothing." },
+  { selector: '[data-tour="gm"]', text: "Your own on/off for the numbers on the map. It doesn't change what players see." },
   { selector: '[data-tour="mlk"]', text: `Sends the hexes to Map Location Keys, so each hex can hold notes there. That extension has to be installed: paste ${MLK_INSTALL} into Owlbear's Add Extension box.` },
 ];
 
@@ -345,9 +344,8 @@ function Panel() {
           <h2>Hex Numbers</h2>
         </div>
         <div className="player-body">
-          {cfg.visibility === "SHOW" && <div className="caption">Hex numbers are shown to everyone.</div>}
-          {cfg.visibility === "OFF" && <div className="caption">Hex numbers are off.</div>}
-          {cfg.visibility === "HIDE" && (
+          {!cfg.players && <div className="caption">Hex numbers are off.</div>}
+          {cfg.players && (
             <>
               <button className={`btn wide ${personal ? "" : "ghost"}`} onClick={togglePersonal}>
                 {personal ? "Hide hex numbers" : "Show hex numbers"}
@@ -383,7 +381,6 @@ function Panel() {
     const lay = layout(cfg, gridType, dpi, lattice);
     if (lay && lay.items) maxLen = lay.items.reduce((m, h) => Math.max(m, h.key.length), 1);
   }
-  const shared = cfg.visibility === "SHOW";
 
   const doSet = async () => {
     setAsk(null);
@@ -392,7 +389,7 @@ function Panel() {
       const res = await selectedHexCenter();
       if (!res.ok) return setMsg(res.error);
       const next = await update({ anchor: res.center });
-      if (!shared) setMsg(`First hex set (${hexKey(next, 0, 0)}).`);
+      setMsg(`First hex set (${hexKey(next, 0, 0)}).`);
     } catch (e) {
       setMsg(`Could not set first hex: ${e && e.message ? e.message : e}`);
     }
@@ -449,18 +446,9 @@ function Panel() {
     }
   };
 
-  // Hexes are never deleted to hide them: the same labels just turn invisible (or visible).
-  const setVisibility = async (visibility) => {
-    if (visibility === cfg.visibility) return;
-    clearTimeout(timer.current);
-    await update({ visibility });
-    setMsg(
-      visibility === "SHOW"
-        ? "Players will see hex numbers."
-        : visibility === "HIDE"
-        ? "Players can turn hex numbers on for themselves."
-        : "Players get no hex numbers."
-    );
+  const setPlayers = async (players) => {
+    await update({ players });
+    setMsg(players ? "Players get a toolbar button to show or hide the numbers." : "Players get no hex numbers.");
   };
 
   const sendMlk = async (how) => {
@@ -512,15 +500,6 @@ function Panel() {
         <h2>Hex Numbers</h2>
         <div className="head-right">
           <HelpButton title="How this works" steps={tour} />
-          <button
-            className="icon-btn"
-            data-tour="eye"
-            data-tip={shared ? "Shared in SHOW" : personal ? "Hide for me" : "Show for me"}
-            disabled={shared}
-            onClick={togglePersonal}
-          >
-            <Eye off={!shared && !personal} />
-          </button>
           <button
             className={`icon-btn mlk-btn ${sent ? "on" : ""}`}
             data-tour="mlk"
@@ -648,20 +627,22 @@ function Panel() {
           )}
           {hexGrid && cfg.mode !== "GRID" && <StartBox cfg={cfg} type={gridType} onChange={(patch) => update(patch)} />}
 
-          <Row label="Players" tour="players">
-            <div className="seg-in">
-              {WHO.map((m) => (
-                <button
-                  key={m}
-                  className={`seg-btn ${cfg.visibility === m ? "active" : ""}`}
-                  data-tip={m === "SHOW" ? "Everyone sees them" : m === "HIDE" ? "Players can opt in" : "Players get nothing"}
-                  onClick={() => setVisibility(m)}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </Row>
+          <div className="row vis" data-tour="players">
+            <label className="vis-cell" data-tip="Players get a toolbar button to show or hide numbers for themselves">
+              <span>Players</span>
+              <input type="checkbox" checked={!!cfg.players} onChange={(e) => setPlayers(e.target.checked)} />
+            </label>
+            <span className="vis-sep" />
+            <button
+              className="vis-cell eye"
+              data-tour="gm"
+              data-tip={personal ? "Hide numbers for me" : "Show numbers for me"}
+              onClick={togglePersonal}
+            >
+              <span>GM</span>
+              <Eye off={!personal} />
+            </button>
+          </div>
         </div>
 
         <Preview
@@ -692,6 +673,8 @@ function Panel() {
           kind={panel}
           color={panel === "fill" ? cfg.fillColor : cfg.strokeColor}
           width={cfg.strokeWidth}
+          opacity={cfg.opacity}
+          onOpacity={(o) => update({ opacity: o })}
           onColor={(c) => update(panel === "fill" ? { fillColor: c } : { strokeColor: c })}
           onWidth={(w) => update({ strokeWidth: w })}
           onClose={() => setPanel(null)}

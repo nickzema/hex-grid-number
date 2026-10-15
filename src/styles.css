@@ -101,6 +101,18 @@ button { cursor: pointer; }
 .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; height: 38px; flex-shrink: 0; border-radius: 10px; background: var(--raise); }
 .modes.grid-kind { display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; color: var(--muted); }
 .row-spacer { height: 38px; flex-shrink: 0; }
+.row.vis { padding: 0; }
+.vis-cell {
+  flex: 1; height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px 0 10px;
+  border: 0; background: transparent; color: var(--muted); font-size: 14px; cursor: pointer;
+}
+.vis-cell:hover { background: var(--raise-hi); color: #fff; }
+.vis-cell input[type=checkbox] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.vis-cell.eye svg { color: #fff; }
+.vis-sep { width: 1px; height: 20px; background: var(--line); flex-shrink: 0; }
+.opacity-row { display: flex; align-items: center; gap: 10px; padding: 4px 6px 2px; font-size: 14px; color: var(--muted); }
+.opacity-row input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.opacity-val { min-width: 38px; text-align: right; color: #fff; }
 .modes .seg-btn { border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 14px; font-weight: 500; padding: 0; }
 .modes .seg-btn:hover { background: var(--raise-hi); color: #fff; }
 .modes .seg-btn.active { background: rgba(187,153,255,0.22); color: var(--accent); }

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.0 - Optional numbers and opacity
+Players get a checkbox and their own toolbar button instead of SHOW/HIDE/OFF, the GM gets an eye, numbers are private per person, and a new opacity slider fades them.
+
 ## 0.8.1 - Click to set
 Set with nothing selected adds a temporary toolbar icon to click the first hex on the map, and moving or restyling hexes now redraws them reliably.
 

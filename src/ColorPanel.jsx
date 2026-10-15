@@ -136,7 +136,7 @@ function CustomPicker({ start, onApply, onCancel }) {
   );
 }
 
-export default function ColorPanel({ kind, color, width, onColor, onWidth, onClose, saved = [], extra = [], onSave }) {
+export default function ColorPanel({ kind, color, width, opacity = 1, onOpacity, onColor, onWidth, onClose, saved = [], extra = [], onSave }) {
   const [custom, setCustom] = useState(false);
   const current = (color || "").toUpperCase();
   const colors = [...SWATCHES];
@@ -191,6 +191,24 @@ export default function ColorPanel({ kind, color, width, onColor, onWidth, onClo
               +
             </button>
           </div>
+        )}
+
+        {!custom && kind === "fill" && onOpacity && (
+          <>
+            <div className="panel-rule" />
+            <label className="opacity-row">
+              <span>Opacity</span>
+              <input
+                type="range"
+                min="5"
+                max="100"
+                step="5"
+                value={Math.round(opacity * 100)}
+                onChange={(e) => onOpacity(parseInt(e.target.value, 10) / 100)}
+              />
+              <span className="opacity-val">{Math.round(opacity * 100)}%</span>
+            </label>
+          </>
         )}
       </div>
     </div>

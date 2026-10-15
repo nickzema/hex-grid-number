@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 // Zemaria help tour: a ? button that highlights the real control a step is about
 // and shows a sentence or two. Steps are { selector, text }.
@@ -76,7 +77,7 @@ export default function HelpButton({ title, steps }) {
   const centerY = place === "center" ? vh / 2 - 70 : undefined;
   const arrowLeft = rect ? Math.min(Math.max(rect.left + rect.width / 2 - left, 18), calloutWidth - 18) : calloutWidth / 2;
 
-  return (
+  return createPortal(
     <div className="tour-overlay" onClick={close}>
       {rect && (
         <div
@@ -116,6 +117,7 @@ export default function HelpButton({ title, steps }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

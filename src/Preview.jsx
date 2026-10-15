@@ -6,8 +6,8 @@ import { parseFor } from "./lib.js";
 // way the grid's dpi measures a hex. Label offset and size are stored in
 // hex sizes, so what you see here is what lands on every hex.
 export const D = 168;
-const W = 216;
-const H = 222;
+const W = 256;
+const H = 232;
 const SQRT3 = Math.sqrt(3);
 const SNAP = 6; // px: how close the label has to be to a snap spot
 

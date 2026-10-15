@@ -1,13 +1,13 @@
 import { useRef, useState } from "react";
 
-// Colors and border sizes laid out like Owlbear's text toolbar:
+// Colors (sampled from Owlbear's own text color panel; white added) and border sizes laid out like its text toolbar:
 // border sizes on the left (border panel only), color swatches on the right,
 // and a "+" that opens a custom color picker with a hex box.
 export const SWATCHES = [
-  "#F6A623", "#6B1FF0", "#F5441E", "#E8391D",
-  "#E8C4A8", "#8A3FFC", "#3A0CA3", "#9B5DFC",
-  "#EE3D5A", "#6A0DF0", "#4A1BFF", "#7B4BFA",
-  "#FFFFFF", "#111111", "#7FA8B5",
+  "#EF9D28", "#5A00F8", "#E9381D", "#E9381B",
+  "#E9C7AC", "#7E2CF9", "#35008B", "#975AF9",
+  "#EA3657", "#6100F8", "#4200F8", "#753FF9",
+  "#17161A", "#7AA5B5", "#FFFFFF",
 ];
 
 // Border sizes in scene px. The first is "none".

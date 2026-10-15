@@ -1,11 +1,12 @@
 *, *::before, *::after { box-sizing: border-box; }
-html, body { margin: 0; background: #1b1e2c; color: #fff; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1e2c; color: #fff; }
+.fit { width: 500px; height: 500px; transform-origin: 0 0; }
 body { font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px; -webkit-font-smoothing: antialiased; }
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :root { --bg: #1b1e2c; --raise: #2a2e42; --raise-hi: #353a52; --line: #343a52; --muted: rgba(255,255,255,0.62); --accent: #BB99FF; --danger: #ff7b86; }
 
-.app { position: relative; min-height: 100vh; padding: 16px; }
+.app { position: relative; width: 500px; height: 500px; padding: 16px; }
 .empty-state { padding: 24px 0; color: var(--muted); text-align: center; }
 .caption { margin-top: 10px; font-size: 13.5px; line-height: 1.4; color: var(--muted); }
 .caption.over { color: var(--danger); }
@@ -73,14 +74,13 @@ button { cursor: pointer; }
 
 /* body: stacked controls left, big hex right */
 .body { display: flex; gap: 12px; align-items: flex-start; }
-.stack { width: 200px; height: 222px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+.stack { width: 200px; height: 232px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
 .row { display: flex; align-items: center; height: 38px; flex-shrink: 0; border-radius: 10px; background: var(--raise); overflow: hidden; }
 .row-label { flex: 0 0 80px; padding-left: 10px; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; }
 .row-val { flex: 1; min-width: 0; height: 100%; display: flex; }
 .row-val input {
   width: 100%; height: 100%; padding: 0 10px; border: 0; outline: 0; background: transparent; font-size: 15px; text-align: right;
 }
-.row.pin { margin-top: auto; }
 .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; height: 38px; flex-shrink: 0; border-radius: 10px; background: var(--raise); }
 .modes .seg-btn { border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 14px; font-weight: 500; padding: 0; }
 .modes .seg-btn:hover { background: var(--raise-hi); color: #fff; }
@@ -125,7 +125,6 @@ button { cursor: pointer; }
 [data-tip]:hover::after { opacity: 1; transition-delay: 0.35s; }
 .head-right [data-tip]::after { left: auto; right: 0; transform: translateY(6px); }
 .stack [data-tip]::after { left: auto; right: 0; transform: translateY(8px); }
-.stack .row.pin [data-tip]::after { top: auto; bottom: 100%; transform: translateY(-8px); }
 
 /* Owlbear-style color and border panel */
 .panel-backdrop { position: absolute; inset: 0; z-index: 20; }
@@ -184,3 +183,24 @@ button { cursor: pointer; }
 .tour-actions { display: flex; align-items: center; justify-content: space-between; }
 .tour-progress { font-size: 12.5px; color: var(--muted); }
 .tour-buttons { display: flex; gap: 6px; }
+
+/* Ring / Spiral start box */
+.start-box { display: flex; align-items: center; gap: 4px; height: 84px; flex-shrink: 0; padding: 0 8px 0 6px; border-radius: 10px; background: var(--raise); }
+.start-svg { flex-shrink: 0; }
+.start-hex { fill: #353a52; stroke: #4b5170; stroke-width: 1; }
+.start-hex.center { fill: #20233a; stroke: #3a3f58; }
+.start-dot { fill: #6d7391; }
+.start-cell { cursor: pointer; }
+.start-cell text { fill: rgba(255,255,255,0.75); font-size: 11px; font-weight: 500; pointer-events: none; }
+.start-cell:hover .start-hex { fill: #444a69; }
+.start-cell.on .start-hex { fill: rgba(187,153,255,0.3); stroke: var(--accent); }
+.start-cell.on text { fill: var(--accent); }
+.start-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.start-label { font-size: 13px; color: var(--muted); }
+.start-dir { flex: none; width: 76px; height: 36px; background: #20233a; border-radius: 8px; }
+.start-dir .seg-btn { height: 100%; }
+
+.brand-footer {
+  position: absolute; left: 0; right: 0; bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 7px;
+  font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(255,255,255,0.4); pointer-events: none;
+}

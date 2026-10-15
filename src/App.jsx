@@ -25,8 +25,10 @@ import { FONTS, fontFor } from "./fonts.js";
 import Preview from "./Preview.jsx";
 import ColorPanel from "./ColorPanel.jsx";
 import HelpButton from "./HelpButton.jsx";
+import StartBox from "./StartBox.jsx";
 
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48];
+const DESIGN = 500;
 const WHO = ["SHOW", "HIDE", "OFF"];
 const MODE_NAMES = { GRID: "Grid", RING: "Ring", SPIRAL: "Spiral" };
 
@@ -38,6 +40,8 @@ const TOUR = [
   { selector: '[data-tour="players"]', text: "SHOW: everyone sees them. HIDE: players can turn them on for themselves, if they have the extension. OFF: players get nothing." },
   { selector: '[data-tour="eye"]', text: "Hides the numbers just for you in HIDE and OFF. In SHOW they're shared, so it can't." },
 ];
+
+const TOUR_START = { selector: '[data-tour="start"]', text: "Click a hex to choose where numbering starts. The arrows pick clockwise or counter-clockwise." };
 
 function Row({ label, children, tour, pin }) {
   return (
@@ -78,7 +82,22 @@ const clampInt = (v, min, max, fallback) => {
   return Number.isNaN(n) ? fallback : Math.min(max, Math.max(min, n));
 };
 
-export default function App() {
+const BrandMark = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+    <ellipse cx="12" cy="14" rx="5" ry="6.5" />
+    <circle cx="12" cy="6" r="2.5" />
+    <path d="M12 8v12M7 11L3 9M7 15l-4 1M7 18.5L4 21M17 11l4-2M17 15l4 1M17 18.5l3 2.5M10.5 4L8 1.5M13.5 4L16 1.5" />
+  </svg>
+);
+
+const Footer = () => (
+  <div className="brand-footer">
+    <BrandMark />
+    <span>Another Zemaria product</span>
+  </div>
+);
+
+function Panel() {
   const [role, setRole] = useState(null);
   const [ready, setReady] = useState(false);
   const [cfg, setCfg] = useState(DEFAULTS);
@@ -187,6 +206,7 @@ export default function App() {
             </>
           )}
         </div>
+        <Footer />
       </div>
     );
   }
@@ -201,6 +221,7 @@ export default function App() {
     ? ring.error
     : `${total} hexes.`;
   const problem = tooMany || (ring && ring.error);
+  const tour = TOUR.flatMap((t, i) => (i === 1 && cfg.mode !== "GRID" ? [t, TOUR_START] : [t]));
   const previewCfg = { ...cfg, template: templateFor(cfg) };
   const shared = cfg.visibility === "SHOW";
 
@@ -270,7 +291,7 @@ export default function App() {
       <div className="head">
         <h2>Hex Numbers</h2>
         <div className="head-right">
-          <HelpButton title="How this works" steps={TOUR} />
+          <HelpButton title="How this works" steps={tour} />
           <button
             className="icon-btn"
             data-tour="eye"
@@ -359,6 +380,21 @@ export default function App() {
             ))}
           </div>
 
+          <Row label="Players" tour="players">
+            <div className="seg-in">
+              {WHO.map((m) => (
+                <button
+                  key={m}
+                  className={`seg-btn ${cfg.visibility === m ? "active" : ""}`}
+                  data-tip={m === "SHOW" ? "Everyone sees them" : m === "HIDE" ? "Players can opt in" : "Players get nothing"}
+                  onClick={() => setVisibility(m)}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </Row>
+
           {cfg.mode === "GRID" && (
             <>
               <Field label="Columns" value={cfg.cols} onCommit={(v) => update({ cols: clampInt(v, 1, 999, cfg.cols) })} />
@@ -383,24 +419,10 @@ export default function App() {
               onCommit={(v) => update({ lastRing: String(v).trim() || cfg.lastRing })}
             />
           )}
+          {cfg.mode !== "GRID" && <StartBox cfg={cfg} type={gridType} onChange={(patch) => update(patch)} />}
           {cfg.mode === "SPIRAL" && (
             <Field label="Hexes" value={cfg.spiralCount} onCommit={(v) => update({ spiralCount: clampInt(v, 1, MAX_HEXES, cfg.spiralCount) })} />
           )}
-
-          <Row label="Players" tour="players" pin>
-            <div className="seg-in">
-              {WHO.map((m) => (
-                <button
-                  key={m}
-                  className={`seg-btn ${cfg.visibility === m ? "active" : ""}`}
-                  data-tip={m === "SHOW" ? "Everyone sees them" : m === "HIDE" ? "Players can opt in" : "Players get nothing"}
-                  onClick={() => setVisibility(m)}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </Row>
 
         </div>
 
@@ -422,6 +444,8 @@ export default function App() {
 
       <div className={`caption ${!msg && problem ? "over" : ""}`}>{msg || summary}</div>
 
+      <Footer />
+
       {panel && (
         <ColorPanel
           kind={panel}
@@ -432,6 +456,28 @@ export default function App() {
           onClose={() => setPanel(null)}
         />
       )}
+    </div>
+  );
+}
+
+// The popover is designed at 500 x 500. If Owlbear gives it less room, shrink everything
+// together so nothing clips.
+function useFit() {
+  const calc = () => Math.min(1, window.innerWidth / DESIGN, window.innerHeight / DESIGN);
+  const [scale, setScale] = useState(calc);
+  useEffect(() => {
+    const on = () => setScale(calc());
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return scale;
+}
+
+export default function App() {
+  const scale = useFit();
+  return (
+    <div className="fit" style={{ transform: scale < 1 ? `scale(${scale})` : "none" }}>
+      <Panel />
     </div>
   );
 }

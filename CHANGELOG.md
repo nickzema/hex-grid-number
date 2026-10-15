@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.0 - Spiral start and colors
+Pick where Ring and Spiral start and which way they go, Owlbear's own color swatches, Players moved up, a 500 square that shrinks to fit, and the Zemaria footer back.
+
 ## 0.5.0 - Ring and Spiral
 Grid, Ring (a letter per ring) and Spiral numbering, bigger interface text in a 460 square, and real fonts in the preview.
 

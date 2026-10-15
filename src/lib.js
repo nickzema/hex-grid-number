@@ -16,6 +16,8 @@ export const DEFAULTS = {
   lastRing: "D", // RING: the last ring to number, in the template's style (a letter, or a number for 01.01)
   spiralTemplate: "1", // SPIRAL: the center hex's number; its shape sets the padding
   spiralCount: 61, // SPIRAL: how many hexes to number
+  start: 0, // RING and SPIRAL: which of the six neighbors the walk starts at (0 = top, then clockwise)
+  dir: 1, // RING and SPIRAL: 1 clockwise, -1 counter-clockwise
   cols: 20,
   rows: 20,
   template: "A.01", // the first hex's key; its shape sets the style of every key
@@ -190,11 +192,18 @@ function cellOffset(type, dpi, shift, c, r) {
   return { x: c * dpi * SQRT3_2, y: r * dpi + (mod2(c) ? (shift * dpi) / 2 : 0) };
 }
 
-// The six neighbor directions, clockwise from the top (pointy hexes: from the upper right).
+// Angles (degrees, y down, so increasing = clockwise) of the six neighbors: from the top for
+// flat-top hexes, from the upper right for pointy-top hexes.
+export const neighborAngles = (type) => (type === "HEX_VERTICAL" ? [-60, 0, 60, 120, 180, 240] : [-90, -30, 30, 90, 150, 210]);
+
+// The six neighbor steps in walking order: begin at neighbor `start`, then go round in `dir`.
 // Every neighbor sits exactly one dpi away.
-function neighborDirs(type, dpi) {
-  const angles = type === "HEX_VERTICAL" ? [-60, 0, 60, 120, 180, 240] : [-90, -30, 30, 90, 150, 210];
-  return angles.map((a) => ({ x: Math.cos((a * Math.PI) / 180) * dpi, y: Math.sin((a * Math.PI) / 180) * dpi }));
+function neighborDirs(type, dpi, start = 0, dir = 1) {
+  const angles = neighborAngles(type);
+  return [0, 1, 2, 3, 4, 5].map((k) => {
+    const a = (angles[(((start || 0) + (dir === -1 ? -k : k)) % 6 + 6) % 6] * Math.PI) / 180;
+    return { x: Math.cos(a) * dpi, y: Math.sin(a) * dpi };
+  });
 }
 
 // Ring n (n >= 1) has 6n hexes, starting at the top and going clockwise.
@@ -216,7 +225,7 @@ export function layout(cfg, type, dpi) {
     const info = ringInfo(cfg);
     if (info.error) return { error: info.error };
     const p = parseTemplate(cfg.template) || parseTemplate(DEFAULTS.template);
-    const dirs = neighborDirs(type, dpi);
+    const dirs = neighborDirs(type, dpi, cfg.start, cfg.dir);
     for (let ring = 0; ring <= info.rings; ring++) {
       let col = p.alpha ? colName(p.colStart + ring) : num(p.colStart + ring, p.colWidth);
       if (p.alpha && p.lower) col = col.toLowerCase();
@@ -224,7 +233,7 @@ export function layout(cfg, type, dpi) {
     }
   } else if (cfg.mode === "SPIRAL") {
     const sp = parseSpiral(cfg.spiralTemplate) || { start: 1, width: 1 };
-    const dirs = neighborDirs(type, dpi);
+    const dirs = neighborDirs(type, dpi, cfg.start, cfg.dir);
     for (let ring = 0; out.length < cfg.spiralCount; ring++) {
       let offs = ringOffsets(ring, dirs);
       // From ring 2 on, start a little before the top so each ring picks up right next to

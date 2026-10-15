@@ -14,15 +14,18 @@ export const DEFAULTS = {
   rows: 20,
   template: "A.01", // the first hex's key; its shape sets the style of every key
   shift: 1, // 1: every second column/row sits down/right. -1: up/left
-  visibility: "ALL", // ALL | GM | OFF
+  visibility: "SHOW", // SHOW: everyone, locked on | HIDE: players can opt in | OFF: players get nothing
   font: DEFAULT_FONT,
   textSize: 0.2, // fraction of the hex size (grid dpi)
   bold: true,
   italic: false,
-  color: "dark", // dark | light
+  fillColor: "#111111",
+  strokeColor: "#FCFBF8",
+  strokeWidth: 2, // scene px, 0 = no border
   rot: 0, // degrees
   ox: 0, // label offset from the hex center, in hex sizes (dpi)
   oy: 0,
+  layoutV: 2, // v2 centers labels using Owlbear's own measurements; older offsets were set against a shifted preview
 };
 
 const SQRT3_2 = Math.sqrt(3) / 2;
@@ -30,9 +33,25 @@ const mod2 = (n) => ((n % 2) + 2) % 2;
 
 /* ---------- config ---------- */
 
+// Merge saved settings over the defaults and carry old settings forward.
+export function normalizeConfig(raw) {
+  const cfg = { ...DEFAULTS, ...(raw || {}) };
+  if (raw && raw.layoutV !== 2) {
+    cfg.ox = 0;
+    cfg.oy = 0;
+  }
+  if (cfg.visibility === "ALL") cfg.visibility = "SHOW";
+  else if (cfg.visibility === "GM") cfg.visibility = "OFF";
+  if (raw && raw.fillColor === undefined && raw.color === "light") {
+    cfg.fillColor = "#FFFFFF";
+    cfg.strokeColor = "#111111";
+  }
+  return cfg;
+}
+
 export async function loadConfig() {
   const meta = await OBR.scene.getMetadata();
-  return { ...DEFAULTS, ...(meta[CONFIG_KEY] || {}) };
+  return normalizeConfig(meta[CONFIG_KEY]);
 }
 
 export async function saveConfig(cfg) {
@@ -65,7 +84,7 @@ export const SEPARATORS = ",.;:'-_`/\\| ";
 
 // "A.01", "AA 01", "A01", "01.01", "c-1" ... column first, then row.
 // Letters count A, B ... Z, AA ... ; numbers count up. Leading zeros set the padding.
-const TEMPLATE_RE = /^([A-Za-z]+|\d+)([,.;:'\-_`/\\| ]?)(\d+)$/;
+const TEMPLATE_RE = /^([A-Za-z]+|-?\d+)([,.;:'\-_`/\\| ]?)(-?\d+)$/;
 
 export function parseTemplate(text) {
   const m = TEMPLATE_RE.exec(String(text ?? "").trim());
@@ -77,10 +96,10 @@ export function parseTemplate(text) {
     alpha,
     lower: alpha && colTok === colTok.toLowerCase(),
     colStart: alpha ? colIndex(colTok) : parseInt(colTok, 10),
-    colWidth: colTok.length,
+    colWidth: colTok.replace("-", "").length,
     sep,
     rowStart: parseInt(rowTok, 10),
-    rowWidth: rowTok.length,
+    rowWidth: rowTok.replace("-", "").length,
   };
 }
 
@@ -94,6 +113,11 @@ function templateOf(cfg) {
   return parsed;
 }
 
+// 7 -> "07" at width 2, -7 -> "-07", 0 -> "00".
+function num(n, width) {
+  return (n < 0 ? "-" : "") + String(Math.abs(n)).padStart(width, "0");
+}
+
 export function hexKey(cfg, c, r) {
   const p = templateOf(cfg);
   let col;
@@ -101,9 +125,9 @@ export function hexKey(cfg, c, r) {
     col = colName(p.colStart + c);
     if (p.lower) col = col.toLowerCase();
   } else {
-    col = String(p.colStart + c).padStart(p.colWidth, "0");
+    col = num(p.colStart + c, p.colWidth);
   }
-  const row = String(p.rowStart + r).padStart(p.rowWidth, "0");
+  const row = num(p.rowStart + r, p.rowWidth);
   return `${col}${p.sep}${row}`;
 }
 
@@ -172,42 +196,78 @@ export async function keyAt(position) {
 
 const isLabel = (item) => item.metadata && item.metadata[LABEL_KEY] !== undefined;
 
-export async function clearLabels() {
-  const ids = (await OBR.scene.items.getItems(isLabel)).map((i) => i.id);
+async function clearFrom(api) {
+  const ids = (await api.getItems(isLabel)).map((i) => i.id);
   for (let i = 0; i < ids.length; i += 200) {
-    await OBR.scene.items.deleteItems(ids.slice(i, i + 200));
+    await api.deleteItems(ids.slice(i, i + 200));
   }
   return ids.length;
 }
 
-export async function setLabelVisibility(visible) {
-  await OBR.scene.items.updateItems(isLabel, (items) => {
-    for (const item of items) item.visible = visible;
-  });
+// Shared labels: real scene items everyone sees (SHOW mode).
+export const clearLabels = () => clearFrom(OBR.scene.items);
+// Private labels: drawn only in this browser (HIDE / OFF modes).
+export const clearLocalLabels = () => clearFrom(OBR.scene.local);
+
+// Where a text item's box sits relative to its `position`, and what it rotates about,
+// measured with Owlbear's own bounds so labels land centered whatever the convention is.
+let calib = null;
+async function getCalib() {
+  if (calib) return calib;
+  const w = 100;
+  const h = 40;
+  const probe = (rot) =>
+    buildText()
+      .plainText("0")
+      .textType("PLAIN")
+      .width(w)
+      .height(h)
+      .position({ x: 0, y: 0 })
+      .rotation(rot)
+      .layer("DRAWING")
+      .locked(true)
+      .disableHit(true)
+      .build();
+  const a = probe(0);
+  const b = probe(90);
+  try {
+    await OBR.scene.local.addItems([a, b]);
+    const [ba, bb] = await Promise.all([OBR.scene.local.getItemBounds([a.id]), OBR.scene.local.getItemBounds([b.id])]);
+    const kx = ba.center.x / w;
+    const ky = ba.center.y / h;
+    if (Number.isFinite(kx) && Number.isFinite(ky)) {
+      // Rotated 90 degrees about the position the center moves to (-h*ky, w*kx);
+      // about the box center it stays at (w*kx, h*ky).
+      const dPos = Math.hypot(bb.center.x + h * ky, bb.center.y - w * kx);
+      const dCen = Math.hypot(bb.center.x - w * kx, bb.center.y - h * ky);
+      calib = { kx, ky, about: dCen < dPos ? "center" : "position" };
+    }
+  } catch (_) {
+    /* fall back below */
+  } finally {
+    try {
+      await OBR.scene.local.deleteItems([a.id, b.id]);
+    } catch (_) {
+      /* already gone */
+    }
+  }
+  return calib || { kx: 0.5, ky: 0.5, about: "position" };
 }
 
-export async function applyLabels(cfg) {
-  if (cfg.visibility === "OFF") {
-    await clearLabels();
-    return { ok: true, count: 0, off: true };
-  }
-  if (!cfg.anchor) return { ok: false, error: "Set the first hex first." };
+// Text items for every hex, or { error } if the scene can't take them.
+async function buildLabels(cfg) {
+  if (!cfg.anchor) return { error: "Set the first hex first." };
   const { type, dpi } = await gridInfo();
-  if (!isHex(type)) return { ok: false, error: "Scene grid is not a hex grid." };
-  if (cfg.cols * cfg.rows > MAX_HEXES) return { ok: false, error: `Too many hexes (max ${MAX_HEXES}).` };
-
-  await clearLabels();
+  if (!isHex(type)) return { error: "Scene grid is not a hex grid." };
+  if (cfg.cols * cfg.rows > MAX_HEXES) return { error: `Too many hexes (max ${MAX_HEXES}).` };
 
   const font = fontByName(cfg.font);
-  const dark = cfg.color !== "light";
-  const fill = dark ? "#111111" : "#FFFFFF";
-  const stroke = dark ? "#FCFBF8" : "#111111";
   const fontPx = dpi * cfg.textSize;
   const theta = ((cfg.rot || 0) * Math.PI) / 180;
   const cos = Math.cos(theta);
   const sin = Math.sin(theta);
   const h = fontPx * 1.4;
-  const visible = cfg.visibility === "ALL";
+  const cal = await getCalib();
 
   const items = [];
   for (let r = 0; r < cfg.rows; r++) {
@@ -217,10 +277,11 @@ export async function applyLabels(cfg) {
       const off = cellOffset(type, dpi, cfg.shift, c, r);
       const cx = cfg.anchor.x + off.x + cfg.ox * dpi;
       const cy = cfg.anchor.y + off.y + cfg.oy * dpi;
-      // Items rotate about their position (top-left), so place that point so the
-      // text's center lands on (cx, cy) after rotating.
-      const px = cx - ((w / 2) * cos - (h / 2) * sin);
-      const py = cy - ((w / 2) * sin + (h / 2) * cos);
+      // Place the item's position so the box center lands on (cx, cy).
+      const kx = cal.kx * w;
+      const ky = cal.ky * h;
+      const px = cal.about === "center" ? cx - kx : cx - (kx * cos - ky * sin);
+      const py = cal.about === "center" ? cy - ky : cy - (kx * sin + ky * cos);
       items.push(
         buildText()
           .plainText(key)
@@ -231,11 +292,11 @@ export async function applyLabels(cfg) {
           .fontWeight(cfg.bold ? 700 : 400)
           .textAlign("CENTER")
           .textAlignVertical("MIDDLE")
-          .fillColor(fill)
-          .fillOpacity(0.9)
-          .strokeColor(stroke)
-          .strokeOpacity(0.9)
-          .strokeWidth(2)
+          .fillColor(cfg.fillColor)
+          .fillOpacity(1)
+          .strokeColor(cfg.strokeColor)
+          .strokeOpacity(cfg.strokeWidth > 0 ? 1 : 0)
+          .strokeWidth(cfg.strokeWidth)
           .padding(0)
           .width(w)
           .height(h)
@@ -244,37 +305,112 @@ export async function applyLabels(cfg) {
           .layer("DRAWING")
           .locked(true)
           .disableHit(true)
-          .visible(visible)
+          .visible(true)
           .metadata({ [LABEL_KEY]: true })
           .build()
       );
     }
   }
-  for (let i = 0; i < items.length; i += 250) {
-    await OBR.scene.items.addItems(items.slice(i, i + 250));
-  }
-  return { ok: true, count: items.length };
+  return { items };
 }
 
+async function place(api, cfg) {
+  const built = await buildLabels(cfg);
+  if (built.error) return { ok: false, error: built.error };
+  await clearFrom(api);
+  for (let i = 0; i < built.items.length; i += 250) {
+    await api.addItems(built.items.slice(i, i + 250));
+  }
+  return { ok: true, count: built.items.length };
+}
+
+export const applyLabels = (cfg) => place(OBR.scene.items, cfg);
+export const applyLocalLabels = (cfg) => place(OBR.scene.local, cfg);
+
 // Redraw requests collapse: only the newest one runs, and two never run at once.
-let busy = false;
-let next = null;
-export function queueLabels(cfg, onResult) {
-  next = { cfg, onResult };
-  if (busy) return;
-  busy = true;
-  (async () => {
-    while (next) {
-      const job = next;
-      next = null;
-      let res;
-      try {
-        res = await applyLabels(job.cfg);
-      } catch (e) {
-        res = { ok: false, error: `Could not place labels: ${e && e.message ? e.message : e}` };
+function makeQueue(run) {
+  let busy = false;
+  let next = null;
+  return (cfg, onResult) => {
+    next = { cfg, onResult };
+    if (busy) return;
+    busy = true;
+    (async () => {
+      while (next) {
+        const job = next;
+        next = null;
+        let res;
+        try {
+          res = await run(job.cfg);
+        } catch (e) {
+          res = { ok: false, error: `Could not place labels: ${e && e.message ? e.message : e}` };
+        }
+        if (job.onResult) job.onResult(res);
       }
-      if (job.onResult) job.onResult(res);
+      busy = false;
+    })();
+  };
+}
+
+export const queueLabels = makeQueue(applyLabels);
+export const queueLocalLabels = makeQueue(applyLocalLabels);
+
+/* ---------- personal show/hide (this browser only) ---------- */
+
+const PERSONAL_KEY = `${ID}/personal`;
+let personalMem = null;
+let channel = null;
+try {
+  channel = new BroadcastChannel(PERSONAL_KEY);
+} catch (_) {
+  channel = null;
+}
+
+// GMs start with labels on, players start with them off.
+export function getPersonal(role) {
+  if (personalMem !== null) return personalMem;
+  try {
+    const v = localStorage.getItem(PERSONAL_KEY);
+    if (v === "on") return true;
+    if (v === "off") return false;
+  } catch (_) {
+    /* storage unavailable */
+  }
+  return role === "GM";
+}
+
+export function setPersonal(on) {
+  personalMem = on;
+  try {
+    localStorage.setItem(PERSONAL_KEY, on ? "on" : "off");
+  } catch (_) {
+    /* storage unavailable */
+  }
+  if (channel) channel.postMessage(on);
+}
+
+export function onPersonalChange(cb) {
+  const fromChannel = (e) => {
+    personalMem = !!e.data;
+    cb();
+  };
+  const fromStorage = (e) => {
+    if (e.key === PERSONAL_KEY) {
+      personalMem = e.newValue === "on";
+      cb();
     }
-    busy = false;
-  })();
+  };
+  if (channel) channel.addEventListener("message", fromChannel);
+  window.addEventListener("storage", fromStorage);
+  return () => {
+    if (channel) channel.removeEventListener("message", fromChannel);
+    window.removeEventListener("storage", fromStorage);
+  };
+}
+
+// Who sees private labels in this browser right now.
+export function wantsLocalLabels(role, cfg, personal) {
+  if (!cfg.anchor || cfg.visibility === "SHOW") return false;
+  if (role === "GM") return personal;
+  return cfg.visibility === "HIDE" && personal;
 }

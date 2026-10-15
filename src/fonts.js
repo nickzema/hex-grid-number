@@ -1,7 +1,7 @@
 // The seven fonts in Owlbear's text toolbar, by the names Owlbear shows.
 // `obr` is the fontFamily value written to the label items.
-// Only Rounded (Roboto, the SDK default) is confirmed. The rest are best guesses
-// until checked against the "Selected text font" line in the popover.
+// Confirmed: Rounded (Roboto, the SDK default) and Marker (Permanent Marker). The rest are
+// best guesses. Hover the font box with an Owlbear text item selected to see its real name.
 // `css` is only for the popover preview and the dropdown, so it is approximate.
 export const FONTS = [
   { name: "Rounded", obr: "Roboto", css: "ui-rounded, 'SF Pro Rounded', 'Varela Round', system-ui, sans-serif" },

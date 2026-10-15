@@ -5,12 +5,19 @@ import { parseTemplate } from "./lib.js";
 // The preview hex is drawn D px tall (flat-top) or wide (pointy-top), the same
 // way the grid's dpi measures a hex. Label offset and size are stored in
 // hex sizes, so what you see here is what lands on every hex.
-export const D = 130;
-const W = 250;
-const H = 210;
+export const D = 100;
+const W = 160;
+const H = 170;
 const SQRT3 = Math.sqrt(3);
+const SNAP = 6; // px: how close the label has to be to a snap spot
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+function luminance(hex) {
+  const n = parseInt(String(hex).replace("#", "").slice(0, 6), 16) || 0;
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
 
 function hexPoints(flat, cx, cy) {
   const R = D / SQRT3;
@@ -23,8 +30,33 @@ function hexPoints(flat, cx, cy) {
   return pts.join(" ");
 }
 
-export default function Preview({ cfg, flat, onChange, onTemplate, onInvalid }) {
+const RotateIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.73-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42l1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z" />
+  </svg>
+);
+
+const EdgeIcon = ({ side }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    {side === "left" ? (
+      <>
+        <path d="M4 5v14" />
+        <path d="M20 12H9" />
+        <path d="M13 8l-4 4 4 4" />
+      </>
+    ) : (
+      <>
+        <path d="M20 5v14" />
+        <path d="M4 12h11" />
+        <path d="M11 8l4 4-4 4" />
+      </>
+    )}
+  </svg>
+);
+
+export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvalid }) {
   const boxRef = useRef(null);
+  const labelRef = useRef(null);
   const inputRef = useRef(null);
   const gesture = useRef(null);
   const liveRef = useRef(null);
@@ -39,11 +71,11 @@ export default function Preview({ cfg, flat, onChange, onTemplate, onInvalid }) 
 
   const v = live ? { ...cfg, ...live } : cfg;
   const font = fontByName(v.font);
-  const dark = v.color !== "light";
   const fontPx = v.textSize * D;
   const cx = W / 2 + v.ox * D;
   const cy = H / 2 + v.oy * D;
   const valid = !!parseTemplate(text);
+  const hexHalf = flat ? D / 2 : D / SQRT3;
 
   const setLiveBoth = (patch) => {
     liveRef.current = { ...(liveRef.current || {}), ...patch };
@@ -68,10 +100,28 @@ export default function Preview({ cfg, flat, onChange, onTemplate, onInvalid }) 
       oy0: cfg.oy,
       size0: cfg.textSize,
       dist0: Math.max(10, Math.hypot(e.clientX - c.x, e.clientY - c.y)),
+      lh: labelRef.current ? labelRef.current.offsetHeight : fontPx * 1.3,
       moved: false,
     };
     liveRef.current = null;
     e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  // Light snap to the center line and five heights: very top, halfway up,
+  // center, halfway down, very bottom (label edge touching the hex edge).
+  const snapPos = (xPx, yPx, lh) => {
+    const reach = Math.max(0, hexHalf - lh / 2);
+    let x = xPx;
+    let y = yPx;
+    if (Math.abs(x) < SNAP) x = 0;
+    let best = SNAP;
+    for (const t of [-reach, -reach / 2, 0, reach / 2, reach]) {
+      if (Math.abs(yPx - t) < best) {
+        best = Math.abs(yPx - t);
+        y = t;
+      }
+    }
+    return { x, y };
   };
 
   const move = (e) => {
@@ -82,7 +132,8 @@ export default function Preview({ cfg, flat, onChange, onTemplate, onInvalid }) 
       const dy = e.clientY - g.sy;
       if (!g.moved && Math.hypot(dx, dy) < 3) return;
       g.moved = true;
-      setLiveBoth({ ox: clamp(g.ox0 + dx / D, -0.9, 0.9), oy: clamp(g.oy0 + dy / D, -0.9, 0.9) });
+      const p = snapPos(g.ox0 * D + dx, g.oy0 * D + dy, g.lh);
+      setLiveBoth({ ox: clamp(p.x / D, -0.9, 0.9), oy: clamp(p.y / D, -0.9, 0.9) });
     } else if (g.kind === "rotate") {
       const c = center();
       let a = (Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180) / Math.PI + 90;
@@ -148,35 +199,42 @@ export default function Preview({ cfg, flat, onChange, onTemplate, onInvalid }) 
     }
   };
 
-  const halo = dark ? "#FCFBF8" : "#111111";
+  const strokePx = (v.strokeWidth || 0) * (D / (dpi || 150));
   const textStyle = {
     fontFamily: font.css,
     fontSize: `${fontPx}px`,
     fontWeight: v.bold ? 700 : 400,
     fontStyle: v.italic ? "italic" : "normal",
-    color: dark ? "#111111" : "#FFFFFF",
-    textShadow: `0 0 2px ${halo}, 0 0 2px ${halo}`,
+    color: v.fillColor,
+    WebkitTextStroke: strokePx > 0 ? `${strokePx}px ${v.strokeColor}` : "0",
+    paintOrder: "stroke fill",
     lineHeight: 1.3,
   };
+
+  const handle = (kind, extra) => ({
+    onPointerDown: (e) => begin(kind, e),
+    onPointerMove: move,
+    onPointerUp: end,
+    onPointerCancel: end,
+    ...extra,
+  });
 
   return (
     <div className="preview" ref={boxRef} style={{ width: W, height: H }} onPointerDown={deselect}>
       <svg width={W} height={H} className="preview-hex">
         <polygon
           points={hexPoints(flat, W / 2, H / 2)}
-          fill={dark ? "#EDEBE4" : "#6f7468"}
+          fill={luminance(v.fillColor) > 0.55 ? "#5b5f56" : "#E9E7DF"}
           stroke="#111111"
           strokeWidth="1.5"
         />
       </svg>
 
       <div
+        ref={labelRef}
         className={`preview-label ${selected ? "selected" : ""}`}
         style={{ left: cx, top: cy, transform: `translate(-50%, -50%) rotate(${v.rot}deg)` }}
-        onPointerDown={(e) => begin("move", e)}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerCancel={end}
+        {...handle("move")}
       >
         <span className="preview-text" style={{ ...textStyle, visibility: selected ? "hidden" : "visible" }}>
           {text || " "}
@@ -201,23 +259,15 @@ export default function Preview({ cfg, flat, onChange, onTemplate, onInvalid }) 
         {selected && (
           <>
             <span className="preview-frame" />
-            <span className="preview-stem" />
-            <span
-              className="handle rotate"
-              title="Rotate"
-              onPointerDown={(e) => begin("rotate", e)}
-              onPointerMove={move}
-              onPointerUp={end}
-              onPointerCancel={end}
-            />
-            <span
-              className="handle resize"
-              title="Resize"
-              onPointerDown={(e) => begin("resize", e)}
-              onPointerMove={move}
-              onPointerUp={end}
-              onPointerCancel={end}
-            />
+            <span className="handle rotate" title="Rotate" {...handle("rotate")}>
+              <RotateIcon />
+            </span>
+            <span className="handle resize left" title="Resize" {...handle("resize")}>
+              <EdgeIcon side="left" />
+            </span>
+            <span className="handle resize right" title="Resize" {...handle("resize")}>
+              <EdgeIcon side="right" />
+            </span>
           </>
         )}
       </div>

@@ -204,3 +204,5 @@ button { cursor: pointer; }
   position: absolute; left: 0; right: 0; bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 7px;
   font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(255,255,255,0.4); pointer-events: none;
 }
+
+.mlk-btn.on { color: var(--accent); background: rgba(187,153,255,0.16); }

@@ -7,6 +7,11 @@ export const LABEL_KEY = `${ID}/label`;
 export const TOOL_ID = `${ID}/tool`;
 export const MODE_READ = `${ID}/read`;
 export const MAX_HEXES = 2500;
+// Map Location Keys (by Alvaro Cavalcanti) lists every text item that carries this metadata.
+export const MLK_KEY = "es.memorablenaton.map-location-keys/metadata";
+const mlkDefault = (key) => `# ${key}\n\n**Description:**\n\n**Features:**\n\n**Creatures:**\n\n**Notes:**`;
+// An entry nobody has written in yet.
+const mlkUntouched = (meta, key) => !meta || (meta.locationKey === mlkDefault(key) && !meta.playerInfo && !meta.isPlayerVisible);
 
 export const MODES = ["GRID", "RING", "SPIRAL"];
 
@@ -16,6 +21,7 @@ export const DEFAULTS = {
   lastRing: "D", // RING: the last ring to number, in the template's style (a letter, or a number for 01.01)
   spiralTemplate: "1", // SPIRAL: the center hex's number; its shape sets the padding
   spiralCount: 61, // SPIRAL: how many hexes to number
+  mlk: false, // send every hex to Map Location Keys
   start: 0, // RING and SPIRAL: which of the six neighbors the walk starts at (0 = top, then clockwise)
   dir: 1, // RING and SPIRAL: 1 clockwise, -1 counter-clockwise
   cols: 20,
@@ -356,7 +362,7 @@ async function getCalib() {
 }
 
 // Text items for every hex, or { error } if the scene can't take them.
-async function buildLabels(cfg) {
+async function buildLabels(cfg, opts = {}) {
   if (!cfg.anchor) return { error: "Set the first hex first." };
   const { type, dpi } = await gridInfo();
   if (!isHex(type)) return { error: "Scene grid is not a hex grid." };
@@ -379,6 +385,7 @@ async function buildLabels(cfg) {
       const w = key.length * fontPx * 0.8 + 8;
       const cx = cfg.anchor.x + hex.x + cfg.ox * dpi;
       const cy = cfg.anchor.y + hex.y + cfg.oy * dpi;
+      const center = `${Math.round(cfg.anchor.x + hex.x)},${Math.round(cfg.anchor.y + hex.y)}`;
       // Place the item's position so the box center lands on (cx, cy).
       const kx = cal.kx * w;
       const ky = cal.ky * h;
@@ -395,9 +402,9 @@ async function buildLabels(cfg) {
           .textAlign("CENTER")
           .textAlignVertical("MIDDLE")
           .fillColor(cfg.fillColor)
-          .fillOpacity(1)
+          .fillOpacity(opts.anchor ? 0 : 1)
           .strokeColor(cfg.strokeColor)
-          .strokeOpacity(cfg.strokeWidth > 0 ? 1 : 0)
+          .strokeOpacity(!opts.anchor && cfg.strokeWidth > 0 ? 1 : 0)
           .strokeWidth(cfg.strokeWidth)
           .padding(0)
           .width(w)
@@ -407,8 +414,8 @@ async function buildLabels(cfg) {
           .layer("DRAWING")
           .locked(true)
           .disableHit(true)
-          .visible(true)
-          .metadata({ [LABEL_KEY]: true })
+          .visible(!opts.anchor)
+          .metadata({ [LABEL_KEY]: center })
           .build()
       );
     }
@@ -416,17 +423,42 @@ async function buildLabels(cfg) {
   return { items };
 }
 
-async function place(api, cfg) {
-  const built = await buildLabels(cfg);
+// opts.shared: these are scene items (carry Map Location Keys entries across redraws).
+// opts.anchor: invisible, fully transparent items (only there to hold entries).
+// opts.onlyNoted: keep just the hexes somebody has written notes for.
+async function place(api, cfg, opts = {}) {
+  const built = await buildLabels(cfg, opts);
   if (built.error) return { ok: false, error: built.error };
-  await clearFrom(api);
-  for (let i = 0; i < built.items.length; i += 250) {
-    await api.addItems(built.items.slice(i, i + 250));
+  let items = built.items;
+  if (opts.shared) {
+    // Notes belong to the hex, so they follow it when keys, mode or style change.
+    const prev = new Map();
+    for (const it of await api.getItems(isLabel)) {
+      const meta = it.metadata[MLK_KEY];
+      const c = it.metadata[LABEL_KEY];
+      if (meta && typeof c === "string") prev.set(c, { meta, key: (it.text && it.text.plainText) || "" });
+    }
+    for (const item of items) {
+      const old = prev.get(item.metadata[LABEL_KEY]);
+      const noted = old && !mlkUntouched(old.meta, old.key);
+      if (noted) item.metadata[MLK_KEY] = old.meta;
+      else if (cfg.mlk) item.metadata[MLK_KEY] = { locationKey: mlkDefault(item.text.plainText), isPlayerEditable: true };
+    }
+    if (opts.onlyNoted) items = items.filter((i) => i.metadata[MLK_KEY]);
   }
-  return { ok: true, count: built.items.length };
+  await clearFrom(api);
+  for (let i = 0; i < items.length; i += 250) {
+    await api.addItems(items.slice(i, i + 250));
+  }
+  return { ok: true, count: items.length };
 }
 
-export const applyLabels = (cfg) => place(OBR.scene.items, cfg);
+// Shared items: visible labels in SHOW; otherwise invisible holders for Map Location Keys
+// entries (all hexes when sending is on, else only hexes with notes).
+export function applyLabels(cfg) {
+  if (cfg.visibility === "SHOW") return place(OBR.scene.items, cfg, { shared: true });
+  return place(OBR.scene.items, cfg, { shared: true, anchor: true, onlyNoted: !cfg.mlk });
+}
 export const applyLocalLabels = (cfg) => place(OBR.scene.local, cfg);
 
 // Redraw requests collapse: only the newest one runs, and two never run at once.

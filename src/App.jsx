@@ -39,6 +39,7 @@ const TOUR = [
   { selector: '[data-tour="format"]', text: "Fill, border, font and size apply to every hex. Click the sample text for round handles to rotate or resize it." },
   { selector: '[data-tour="players"]', text: "SHOW: everyone sees them. HIDE: players can turn them on for themselves, if they have the extension. OFF: players get nothing." },
   { selector: '[data-tour="eye"]', text: "Hides the numbers just for you in HIDE and OFF. In SHOW they're shared, so it can't." },
+  { selector: '[data-tour="mlk"]', text: "Sends every hex to Map Location Keys, so each hex can hold notes there. Needs that extension." },
 ];
 
 const TOUR_START = { selector: '[data-tour="start"]', text: "Click a hex to choose where numbering starts. The arrows pick clockwise or counter-clockwise." };
@@ -68,6 +69,15 @@ function Field({ label, value, onCommit, numeric = true }) {
     </Row>
   );
 }
+
+const MlkIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="9.5" stroke="currentColor" strokeWidth="1.8" />
+    <text x="12" y="16.6" textAnchor="middle" fontSize="13.5" fontFamily="Georgia, 'Times New Roman', serif" fill="currentColor">
+      1
+    </text>
+  </svg>
+);
 
 const Eye = ({ off }) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -161,6 +171,10 @@ function Panel() {
     };
   }, []);
 
+  const quiet = (res) => {
+    if (!res.ok) setMsg(res.error);
+  };
+
   const report = (res) => {
     if (res.ok) setMsg(`${res.count} labels placed.`);
     else setMsg(res.error);
@@ -173,9 +187,9 @@ function Panel() {
     cfgRef.current = next;
     setCfg(next);
     await saveConfig(next);
-    if (redraw && next.anchor && next.visibility === "SHOW") {
+    if (redraw && next.anchor && (next.visibility === "SHOW" || next.mlk || patch.mlk !== undefined)) {
       clearTimeout(timer.current);
-      timer.current = setTimeout(() => queueLabels(cfgRef.current, report), 350);
+      timer.current = setTimeout(() => queueLabels(cfgRef.current, next.visibility === "SHOW" ? report : quiet), 350);
     }
     return next;
   };
@@ -249,7 +263,7 @@ function Panel() {
 
   const onReset = () => {
     setMsg("");
-    setAsk({ kind: "reset", text: "Remove all hex labels?" });
+    setAsk({ kind: "reset", text: cfg.mlk ? "Remove all hex labels and their Map Location Keys entries?" : "Remove all hex labels?" });
   };
 
   const doReset = async () => {
@@ -273,12 +287,28 @@ function Panel() {
         if (cfgRef.current.anchor) queueLabels(cfgRef.current, report);
         else setMsg("Players will see hex numbers.");
       } else {
-        await clearLabels();
+        // Shared labels come down; invisible Map Location Keys holders stay where they are needed.
+        if (cfgRef.current.anchor) queueLabels(cfgRef.current, quiet);
+        else await clearLabels();
         setMsg(visibility === "HIDE" ? "Players can turn hex numbers on for themselves." : "Players get no hex numbers.");
       }
     } catch (e) {
       setMsg(`Could not change who sees labels: ${e && e.message ? e.message : e}`);
     }
+  };
+
+  const toggleMlk = async () => {
+    const on = !cfg.mlk;
+    await update({ mlk: on });
+    setMsg(
+      !cfg.anchor
+        ? on
+          ? "On. Press Set, then every hex goes to Map Location Keys."
+          : "Off."
+        : on
+        ? "Sending hexes to Map Location Keys."
+        : "Stopped. Hexes with notes stay in Map Location Keys."
+    );
   };
 
   const sizeNow = Math.round(cfg.textSize * 100);
@@ -300,6 +330,14 @@ function Panel() {
             onClick={togglePersonal}
           >
             <Eye off={!shared && !personal} />
+          </button>
+          <button
+            className={`icon-btn mlk-btn ${cfg.mlk ? "on" : ""}`}
+            data-tour="mlk"
+            data-tip={cfg.mlk ? "Sending hexes to Map Location Keys" : "Send hexes to Map Location Keys"}
+            onClick={toggleMlk}
+          >
+            <MlkIcon />
           </button>
           <button className="btn" data-tour="set" onClick={onSet}>
             Set
@@ -380,21 +418,6 @@ function Panel() {
             ))}
           </div>
 
-          <Row label="Players" tour="players">
-            <div className="seg-in">
-              {WHO.map((m) => (
-                <button
-                  key={m}
-                  className={`seg-btn ${cfg.visibility === m ? "active" : ""}`}
-                  data-tip={m === "SHOW" ? "Everyone sees them" : m === "HIDE" ? "Players can opt in" : "Players get nothing"}
-                  onClick={() => setVisibility(m)}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </Row>
-
           {cfg.mode === "GRID" && (
             <>
               <Field label="Columns" value={cfg.cols} onCommit={(v) => update({ cols: clampInt(v, 1, 999, cfg.cols) })} />
@@ -419,11 +442,25 @@ function Panel() {
               onCommit={(v) => update({ lastRing: String(v).trim() || cfg.lastRing })}
             />
           )}
-          {cfg.mode !== "GRID" && <StartBox cfg={cfg} type={gridType} onChange={(patch) => update(patch)} />}
           {cfg.mode === "SPIRAL" && (
             <Field label="Hexes" value={cfg.spiralCount} onCommit={(v) => update({ spiralCount: clampInt(v, 1, MAX_HEXES, cfg.spiralCount) })} />
           )}
+          {cfg.mode !== "GRID" && <StartBox cfg={cfg} type={gridType} onChange={(patch) => update(patch)} />}
 
+          <Row label="Players" tour="players">
+            <div className="seg-in">
+              {WHO.map((m) => (
+                <button
+                  key={m}
+                  className={`seg-btn ${cfg.visibility === m ? "active" : ""}`}
+                  data-tip={m === "SHOW" ? "Everyone sees them" : m === "HIDE" ? "Players can opt in" : "Players get nothing"}
+                  onClick={() => setVisibility(m)}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </Row>
         </div>
 
         <Preview

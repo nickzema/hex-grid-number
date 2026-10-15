@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.0 - Map Location Keys
+Send every hex to Map Location Keys from a header button, Players moved to the bottom of the list, and the extra toolbar tool removed.
+
 ## 0.6.0 - Spiral start and colors
 Pick where Ring and Spiral start and which way they go, Owlbear's own color swatches, Players moved up, a 500 square that shrinks to fit, and the Zemaria footer back.
 

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { fontByName } from "./fonts.js";
+import { fontFor } from "./fonts.js";
 import { parseTemplate } from "./lib.js";
 
 // The preview hex is drawn D px tall (flat-top) or wide (pointy-top), the same
 // way the grid's dpi measures a hex. Label offset and size are stored in
 // hex sizes, so what you see here is what lands on every hex.
-export const D = 100;
-const W = 160;
-const H = 170;
+export const D = 120;
+const W = 186;
+const H = 190;
 const SQRT3 = Math.sqrt(3);
 const SNAP = 6; // px: how close the label has to be to a snap spot
 
@@ -70,7 +70,7 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
   }, [cfg.template, selected]);
 
   const v = live ? { ...cfg, ...live } : cfg;
-  const font = fontByName(v.font);
+  const font = fontFor(v);
   const fontPx = v.textSize * D;
   const cx = W / 2 + v.ox * D;
   const cy = H / 2 + v.oy * D;
@@ -139,7 +139,7 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
       let a = (Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180) / Math.PI + 90;
       if (a > 180) a -= 360;
       const snap = Math.round(a / 15) * 15;
-      if (Math.abs(a - snap) < 3) a = snap;
+      if (Math.abs(a - snap) < 6) a = snap;
       g.moved = true;
       setLiveBoth({ rot: Math.round(a) });
     } else if (g.kind === "resize") {
@@ -220,7 +220,7 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
   });
 
   return (
-    <div className="preview" ref={boxRef} style={{ width: W, height: H }} onPointerDown={deselect}>
+    <div className="preview" data-tour="sample" ref={boxRef} style={{ width: W, height: H }} onPointerDown={deselect}>
       <svg width={W} height={H} className="preview-hex">
         <polygon
           points={hexPoints(flat, W / 2, H / 2)}
@@ -259,7 +259,7 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
         {selected && (
           <>
             <span className="preview-frame" />
-            <span className="handle rotate" title="Rotate" {...handle("rotate")}>
+            <span className="handle rotate" title="Rotate (double-click for straight)" onDoubleClick={() => onChange({ rot: 0 })} {...handle("rotate")}>
               <RotateIcon />
             </span>
             <span className="handle resize left" title="Resize" {...handle("resize")}>

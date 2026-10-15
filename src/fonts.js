@@ -16,3 +16,11 @@ export const FONTS = [
 export const DEFAULT_FONT = "Rounded";
 
 export const fontByName = (name) => FONTS.find((f) => f.name === name) || FONTS[0];
+
+// A font copied from a text item selected in Owlbear (the "Selected text" option).
+export function fontFor(cfg) {
+  if (cfg.font === "Custom" && cfg.fontCustom) {
+    return { name: "Custom", obr: cfg.fontCustom, css: `'${cfg.fontCustom}', system-ui, sans-serif` };
+  }
+  return fontByName(cfg.font);
+}

@@ -1,5 +1,5 @@
 import OBR, { buildText } from "@owlbear-rodeo/sdk";
-import { fontByName, DEFAULT_FONT } from "./fonts.js";
+import { fontFor, DEFAULT_FONT } from "./fonts.js";
 
 export const ID = "com.zemaria.hex-grid-number";
 export const CONFIG_KEY = `${ID}/config`;
@@ -16,6 +16,7 @@ export const DEFAULTS = {
   shift: 1, // 1: every second column/row sits down/right. -1: up/left
   visibility: "SHOW", // SHOW: everyone, locked on | HIDE: players can opt in | OFF: players get nothing
   font: DEFAULT_FONT,
+  fontCustom: "", // fontFamily copied from a selected Owlbear text item (font: "Custom")
   textSize: 0.2, // fraction of the hex size (grid dpi)
   bold: true,
   italic: false,
@@ -261,7 +262,7 @@ async function buildLabels(cfg) {
   if (!isHex(type)) return { error: "Scene grid is not a hex grid." };
   if (cfg.cols * cfg.rows > MAX_HEXES) return { error: `Too many hexes (max ${MAX_HEXES}).` };
 
-  const font = fontByName(cfg.font);
+  const font = fontFor(cfg);
   const fontPx = dpi * cfg.textSize;
   const theta = ((cfg.rot || 0) * Math.PI) / 180;
   const cos = Math.cos(theta);

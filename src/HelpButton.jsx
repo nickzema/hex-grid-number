@@ -1,0 +1,121 @@
+import { useEffect, useRef, useState } from "react";
+
+// Zemaria help tour: a ? button that highlights the real control a step is about
+// and shows a sentence or two. Steps are { selector, text }.
+
+function useTargetRect(selector) {
+  const [rect, setRect] = useState(null);
+  useEffect(() => {
+    if (!selector) {
+      setRect(null);
+      return;
+    }
+    const update = () => {
+      const el = document.querySelector(selector);
+      setRect(el ? el.getBoundingClientRect() : null);
+    };
+    update();
+    const id = window.setInterval(update, 200);
+    window.addEventListener("resize", update);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("resize", update);
+    };
+  }, [selector]);
+  return rect;
+}
+
+export default function HelpButton({ title, steps }) {
+  const [open, setOpen] = useState(false);
+  const [i, setI] = useState(0);
+  const nextRef = useRef(null);
+  const close = () => {
+    setOpen(false);
+    setI(0);
+  };
+
+  const step = open ? steps[i] : null;
+  const rect = useTargetRect(step ? step.selector : null);
+
+  useEffect(() => {
+    if (open && nextRef.current) nextRef.current.focus();
+  }, [i, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") close();
+      if (e.key === "ArrowRight") setI((n) => Math.min(n + 1, steps.length - 1));
+      if (e.key === "ArrowLeft") setI((n) => Math.max(n - 1, 0));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, steps.length]);
+
+  if (!open) {
+    return (
+      <button className="help-btn" data-tip={title} onClick={() => setOpen(true)}>
+        ?
+      </button>
+    );
+  }
+  if (!step) return null;
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const calloutWidth = 250;
+  // Below the target if it fits, else above, else docked at the bottom of the popover.
+  const need = 160;
+  const place = !rect ? "center" : vh - rect.bottom > need ? "below" : rect.top > need ? "above" : "dock";
+  const placeBelow = place !== "above";
+  const left = rect
+    ? Math.min(Math.max(rect.left - 20, 10), vw - calloutWidth - 10)
+    : Math.max((vw - calloutWidth) / 2, 10);
+  const top = place === "below" ? rect.bottom + 14 : undefined;
+  const bottom = place === "above" ? vh - rect.top + 14 : place === "dock" ? 10 : undefined;
+  const centerY = place === "center" ? vh / 2 - 70 : undefined;
+  const arrowLeft = rect ? Math.min(Math.max(rect.left + rect.width / 2 - left, 18), calloutWidth - 18) : calloutWidth / 2;
+
+  return (
+    <div className="tour-overlay" onClick={close}>
+      {rect && (
+        <div
+          className="tour-highlight"
+          style={{ top: rect.top - 4, left: rect.left - 4, width: rect.width + 8, height: rect.height + 8 }}
+        />
+      )}
+      <div
+        className="tour-callout"
+        style={{ top: top ?? centerY, bottom, left, width: calloutWidth }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {rect && place !== "dock" && <div className={`tour-arrow ${placeBelow ? "up" : "down"}`} style={{ left: arrowLeft }} />}
+        <button className="tour-skip" onClick={close}>
+          &times;
+        </button>
+        <p>{step.text}</p>
+        <div className="tour-actions">
+          <span className="tour-progress">
+            {i + 1} / {steps.length}
+          </span>
+          <div className="tour-buttons">
+            {i > 0 && (
+              <button className="btn text" onClick={() => setI((n) => n - 1)}>
+                Back
+              </button>
+            )}
+            {i < steps.length - 1 ? (
+              <button ref={nextRef} className="btn" onClick={() => setI((n) => n + 1)}>
+                Next
+              </button>
+            ) : (
+              <button ref={nextRef} className="btn" onClick={close}>
+                Done
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

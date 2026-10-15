@@ -17,16 +17,25 @@ import {
   setPersonal,
   onPersonalChange,
 } from "./lib.js";
-import { FONTS, fontByName } from "./fonts.js";
+import { FONTS, fontFor } from "./fonts.js";
 import Preview from "./Preview.jsx";
 import ColorPanel from "./ColorPanel.jsx";
+import HelpButton from "./HelpButton.jsx";
 
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48];
 const MODES = ["SHOW", "HIDE", "OFF"];
 
-function Row({ label, children }) {
+const TOUR = [
+  { selector: '[data-tour="set"]', text: "Select a token on the hex you want numbered first, then press Set. Numbers count right and down from there." },
+  { selector: '[data-tour="sample"]', text: "Click the text to type the first hex's number, like A.01, 01.01 or -7.-3. Drag it to move it." },
+  { selector: '[data-tour="format"]', text: "Fill, border, font and size apply to every hex. Click the sample text for round handles to rotate or resize it." },
+  { selector: '[data-tour="players"]', text: "SHOW: everyone sees them. HIDE: players can turn them on for themselves, if they have the extension. OFF: players get nothing." },
+  { selector: '[data-tour="eye"]', text: "Hides the numbers just for you in HIDE and OFF. In SHOW they're shared, so it can't." },
+];
+
+function Row({ label, children, tour }) {
   return (
-    <div className="chip-row">
+    <div className="chip-row" data-tour={tour}>
       <span className="chip field-chip">{label}</span>
       <div className="box">{children}</div>
     </div>
@@ -46,56 +55,6 @@ function Field({ label, value, onCommit }) {
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
       />
     </Row>
-  );
-}
-
-function Help({ onClose }) {
-  return (
-    <div className="panel-backdrop" onPointerDown={onClose}>
-      <div className="help-panel" onPointerDown={(e) => e.stopPropagation()}>
-        <div className="help-head">
-          <h3>How it works</h3>
-          <button className="btn text" onClick={onClose}>
-            Close
-          </button>
-        </div>
-
-        <h4>1. Set the first hex</h4>
-        <p>
-          Put a token on the hex that should get the first number, and click the token so it is selected. Then press{" "}
-          <b>Set</b>. That hex becomes the first hex, and every other hex is numbered from it: columns count to the right,
-          rows count downward. Select a different token and press Set again to move the start (it asks first).
-        </p>
-        <p>The number shown in the sample hex is the first hex's number. Change it to start somewhere else.</p>
-
-        <h4>2. Edit in the sample hex</h4>
-        <p>
-          Click the text in the sample hex to type. Drag it to move it. When it is selected, use the round handles to
-          rotate it or make it bigger or smaller. Everything you change appears on every hex.
-        </p>
-        <p>
-          Type the first hex's key as column, then row: A.01, AA 01, 01.01 or -7.-3. Letters count A to Z, then AA, AB.
-          Numbers count up. Leading zeros set the padding. Separators: {SEPARATORS.trim()} or a space.
-        </p>
-
-        <h4>3. Who sees the numbers</h4>
-        <p>
-          <b>SHOW</b> puts the numbers on the map for everyone. Players need nothing installed and can't turn them off.
-        </p>
-        <p>
-          <b>HIDE</b> hides them until a player turns them on for themselves. Only that player sees them. They need
-          this extension installed to do it, and nobody else is affected.
-        </p>
-        <p>
-          <b>OFF</b> gives players nothing.
-        </p>
-        <p>
-          The eye button is your own view. Use it to hide the numbers just for you when the map gets cluttered. It works
-          in HIDE and OFF; in SHOW the numbers are shared, so it can't hide them for you alone.
-        </p>
-        <p>Hex size and orientation (flat-top or pointy-top) come from your Owlbear grid.</p>
-      </div>
-    </div>
   );
 }
 
@@ -121,7 +80,6 @@ export default function App() {
   const [msg, setMsg] = useState("");
   const [ask, setAsk] = useState(null); // { kind: "set" | "reset", text }
   const [panel, setPanel] = useState(null); // null | "fill" | "stroke"
-  const [help, setHelp] = useState(false);
   const [probe, setProbe] = useState("");
   const [personal, setPersonalState] = useState(null);
   const cfgRef = useRef(cfg);
@@ -293,28 +251,25 @@ export default function App() {
 
   const sizeNow = Math.round(cfg.textSize * 100);
   const sizes = SIZES.includes(sizeNow) ? SIZES : [...SIZES, sizeNow].sort((a, b) => a - b);
-  const font = fontByName(cfg.font);
+  const font = fontFor(cfg);
   const offsetIcons = flat ? ["↘", "↗"] : ["↘", "↙"];
 
   return (
     <div className="app">
       <div className="list-toolbar head">
-        <h2>
-          Hex Numbers
-          <button className="help-btn" title="How this works" onClick={() => setHelp(true)}>
-            ?
-          </button>
-        </h2>
-        <div className="head-actions">
+        <h2>Hex Numbers</h2>
+        <div className="list-toolbar-right">
+          <HelpButton title="How this works" steps={TOUR} />
           <button
-            className={`icon-btn ${shared ? "locked" : ""}`}
-            title={shared ? "In SHOW the labels are shared, so you can't hide them just for you" : personal ? "Hide hex numbers for me" : "Show hex numbers for me"}
+            className="icon-btn"
+            data-tour="eye"
+            data-tip={shared ? "Shared in SHOW" : personal ? "Hide for me" : "Show for me"}
             disabled={shared}
             onClick={togglePersonal}
           >
             <Eye off={!shared && !personal} />
           </button>
-          <button className="btn" onClick={onSet}>
+          <button className="btn" data-tour="set" onClick={onSet}>
             Set
           </button>
           <button className="btn" onClick={onReset}>
@@ -335,31 +290,36 @@ export default function App() {
         </div>
       )}
 
-      <div className="format-bar">
+      <div className="format-bar" data-tour="format">
         <button
           className={`swatch fill ${panel === "fill" ? "active" : ""}`}
           style={{ background: cfg.fillColor }}
-          title="Fill color"
+          data-tip="Fill color"
           onClick={() => setPanel(panel === "fill" ? null : "fill")}
         />
         <button
           className={`swatch ring ${panel === "stroke" ? "active" : ""} ${cfg.strokeWidth ? "" : "none"}`}
           style={{ borderColor: cfg.strokeColor }}
-          title="Border color and size"
+          data-tip="Border"
           onClick={() => setPanel(panel === "stroke" ? null : "stroke")}
         />
         <select
           className="font-select"
           style={{ fontFamily: font.css }}
-          title={probe ? `Selected Owlbear text uses: ${probe}` : undefined}
           value={cfg.font}
-          onChange={(e) => update({ font: e.target.value })}
+          onChange={(e) =>
+            e.target.value === "__selected"
+              ? update({ font: "Custom", fontCustom: probe })
+              : update({ font: e.target.value })
+          }
         >
           {FONTS.map((f) => (
             <option key={f.name} value={f.name} style={{ fontFamily: f.css }}>
               {f.name}
             </option>
           ))}
+          {cfg.font === "Custom" && <option value="Custom">{cfg.fontCustom}</option>}
+          {probe && probe !== cfg.fontCustom && <option value="__selected">{`Selected text: ${probe}`}</option>}
         </select>
         <select className="size-select" value={sizeNow} onChange={(e) => update({ textSize: parseInt(e.target.value, 10) / 100 })}>
           {sizes.map((s) => (
@@ -368,10 +328,10 @@ export default function App() {
             </option>
           ))}
         </select>
-        <button className={`fmt-btn bold ${cfg.bold ? "active" : ""}`} title="Bold" onClick={() => update({ bold: !cfg.bold })}>
+        <button className={`fmt-btn bold ${cfg.bold ? "active" : ""}`} data-tip="Bold" onClick={() => update({ bold: !cfg.bold })}>
           B
         </button>
-        <button className={`fmt-btn italic ${cfg.italic ? "active" : ""}`} title="Italic" onClick={() => update({ italic: !cfg.italic })}>
+        <button className={`fmt-btn italic ${cfg.italic ? "active" : ""}`} data-tip="Italic" onClick={() => update({ italic: !cfg.italic })}>
           I
         </button>
       </div>
@@ -383,28 +343,22 @@ export default function App() {
 
           <Row label="Offset">
             <div className="seg-in">
-              <button className={`seg-btn arrow ${cfg.shift === 1 ? "active" : ""}`} title="Every second one sits down / right" onClick={() => update({ shift: 1 })}>
+              <button className={`seg-btn arrow ${cfg.shift === 1 ? "active" : ""}`} data-tip="Second one sits lower" onClick={() => update({ shift: 1 })}>
                 {offsetIcons[0]}
               </button>
-              <button className={`seg-btn arrow ${cfg.shift === -1 ? "active" : ""}`} title="Every second one sits up / left" onClick={() => update({ shift: -1 })}>
+              <button className={`seg-btn arrow ${cfg.shift === -1 ? "active" : ""}`} data-tip="Second one sits higher" onClick={() => update({ shift: -1 })}>
                 {offsetIcons[1]}
               </button>
             </div>
           </Row>
 
-          <Row label="Players">
+          <Row label="Players" tour="players">
             <div className="seg-in">
               {MODES.map((m) => (
                 <button
                   key={m}
                   className={`seg-btn ${cfg.visibility === m ? "active" : ""}`}
-                  title={
-                    m === "SHOW"
-                      ? "Everyone sees them"
-                      : m === "HIDE"
-                      ? "Hidden until a player turns them on for themselves"
-                      : "Players get nothing"
-                  }
+                  data-tip={m === "SHOW" ? "Everyone sees them" : m === "HIDE" ? "Players can opt in" : "Players get nothing"}
                   onClick={() => setVisibility(m)}
                 >
                   {m}
@@ -434,8 +388,6 @@ export default function App() {
         <span className="brand-mark"></span>
         <span>Another Zemaria product</span>
       </div>
-
-      {help && <Help onClose={() => setHelp(false)} />}
 
       {panel && (
         <ColorPanel

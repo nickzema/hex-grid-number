@@ -35,9 +35,9 @@ const TOUR = [
 
 function Row({ label, children, tour }) {
   return (
-    <div className="chip-row" data-tour={tour}>
-      <span className="chip field-chip">{label}</span>
-      <div className="box">{children}</div>
+    <div className="row" data-tour={tour}>
+      <span className="row-label">{label}</span>
+      <div className="row-val">{children}</div>
     </div>
   );
 }
@@ -165,7 +165,7 @@ export default function App() {
   if (role !== "GM") {
     return (
       <div className="app">
-        <div className="list-toolbar head">
+        <div className="head">
           <h2>Hex Numbers</h2>
         </div>
         <div className="player-body">
@@ -179,10 +179,6 @@ export default function App() {
               <div className="caption">Only you see them.</div>
             </>
           )}
-        </div>
-        <div className="brand-footer">
-          <span className="brand-mark"></span>
-          <span>Another Zemaria product</span>
         </div>
       </div>
     );
@@ -256,9 +252,9 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="list-toolbar head">
+      <div className="head">
         <h2>Hex Numbers</h2>
-        <div className="list-toolbar-right">
+        <div className="head-right">
           <HelpButton title="How this works" steps={TOUR} />
           <button
             className="icon-btn"
@@ -290,7 +286,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="format-bar" data-tour="format">
+      <div className="toolbar" data-tour="format">
         <button
           className={`swatch fill ${panel === "fill" ? "active" : ""}`}
           style={{ background: cfg.fillColor }}
@@ -303,6 +299,7 @@ export default function App() {
           data-tip="Border"
           onClick={() => setPanel(panel === "stroke" ? null : "stroke")}
         />
+        <span className="tb-sep" />
         <select
           className="font-select"
           style={{ fontFamily: font.css }}
@@ -328,6 +325,7 @@ export default function App() {
             </option>
           ))}
         </select>
+        <span className="tb-sep" />
         <button className={`fmt-btn bold ${cfg.bold ? "active" : ""}`} data-tip="Bold" onClick={() => update({ bold: !cfg.bold })}>
           B
         </button>
@@ -337,7 +335,7 @@ export default function App() {
       </div>
 
       <div className="body">
-        <div className="stack left">
+        <div className="stack">
           <Field label="Columns" value={cfg.cols} onCommit={(v) => update({ cols: clampInt(v, 1, 999, cfg.cols) })} />
           <Field label="Rows" value={cfg.rows} onCommit={(v) => update({ rows: clampInt(v, 1, 999, cfg.rows) })} />
 
@@ -383,11 +381,6 @@ export default function App() {
       </div>
 
       {msg && <div className="caption">{msg}</div>}
-
-      <div className="brand-footer">
-        <span className="brand-mark"></span>
-        <span>Another Zemaria product</span>
-      </div>
 
       {panel && (
         <ColorPanel

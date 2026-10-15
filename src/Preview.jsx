@@ -5,9 +5,9 @@ import { parseTemplate } from "./lib.js";
 // The preview hex is drawn D px tall (flat-top) or wide (pointy-top), the same
 // way the grid's dpi measures a hex. Label offset and size are stored in
 // hex sizes, so what you see here is what lands on every hex.
-export const D = 120;
-const W = 186;
-const H = 190;
+export const D = 150;
+const W = 204;
+const H = 200;
 const SQRT3 = Math.sqrt(3);
 const SNAP = 6; // px: how close the label has to be to a snap spot
 
@@ -224,9 +224,10 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
       <svg width={W} height={H} className="preview-hex">
         <polygon
           points={hexPoints(flat, W / 2, H / 2)}
-          fill={luminance(v.fillColor) > 0.55 ? "#5b5f56" : "#E9E7DF"}
-          stroke="#111111"
-          strokeWidth="1.5"
+          fill={luminance(v.fillColor) > 0.45 ? "#2d3146" : "#D9DCE6"}
+          stroke={luminance(v.fillColor) > 0.45 ? "#6d7391" : "#9097b0"}
+          strokeWidth="2"
+          strokeLinejoin="round"
         />
       </svg>
 

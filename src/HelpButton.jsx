@@ -105,11 +105,11 @@ export default function HelpButton({ title, steps }) {
               </button>
             )}
             {i < steps.length - 1 ? (
-              <button ref={nextRef} className="btn" onClick={() => setI((n) => n + 1)}>
+              <button ref={nextRef} className="btn primary" onClick={() => setI((n) => n + 1)}>
                 Next
               </button>
             ) : (
-              <button ref={nextRef} className="btn" onClick={close}>
+              <button ref={nextRef} className="btn primary" onClick={close}>
                 Done
               </button>
             )}

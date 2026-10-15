@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.0 - Owlbear look
+Dark Owlbear-style panel laid out like the sketch, with a bigger sample hex and the Zemaria styling removed.
+
 ## 0.3.1 - Tour and layout
 Zemaria help tour on the right, bigger sample hex, left controls rebuilt so nothing overlaps, double-click the rotate handle to straighten.
 

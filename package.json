@@ -1,7 +1,7 @@
 {
   "name": "hex-grid-number",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,8 +11,7 @@
   "dependencies": {
     "@owlbear-rodeo/sdk": "^3.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "zemaria-ui": "github:nickzema/zemaria-ui#v1.0.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

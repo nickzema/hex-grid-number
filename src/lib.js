@@ -9,6 +9,9 @@ export const MODE_READ = `${ID}/read`;
 export const MAX_HEXES = 2500;
 // Map Location Keys (by Alvaro Cavalcanti) lists every text item that carries this metadata.
 export const MLK_KEY = "es.memorablenaton.map-location-keys/metadata";
+export const MLK_INSTALL = "https://map-location-keys.vercel.app/manifest.json";
+// A short fingerprint of how a label looks, so unchanged labels are left alone.
+const SIG_KEY = `${ID}/sig`;
 const mlkDefault = (key) => `# ${key}\n\n**Description:**\n\n**Features:**\n\n**Creatures:**\n\n**Notes:**`;
 // An entry nobody has written in yet.
 const mlkUntouched = (meta, key) => !meta || (meta.locationKey === mlkDefault(key) && !meta.playerInfo && !meta.isPlayerVisible);
@@ -21,7 +24,6 @@ export const DEFAULTS = {
   lastRing: "D", // RING: the last ring to number, in the template's style (a letter, or a number for 01.01)
   spiralTemplate: "1", // SPIRAL: the center hex's number; its shape sets the padding
   spiralCount: 61, // SPIRAL: how many hexes to number
-  mlk: false, // send every hex to Map Location Keys
   start: 0, // RING and SPIRAL: which of the six neighbors the walk starts at (0 = top, then clockwise)
   dir: 1, // RING and SPIRAL: 1 clockwise, -1 counter-clockwise
   cols: 20,
@@ -423,44 +425,127 @@ async function buildLabels(cfg, opts = {}) {
   return { items };
 }
 
-// opts.shared: these are scene items (carry Map Location Keys entries across redraws).
-// opts.anchor: invisible, fully transparent items (only there to hold entries).
-// opts.onlyNoted: keep just the hexes somebody has written notes for.
-async function place(api, cfg, opts = {}) {
-  const built = await buildLabels(cfg, opts);
+// Private labels (this browser only): simply redrawn from scratch.
+async function place(api, cfg) {
+  const built = await buildLabels(cfg);
   if (built.error) return { ok: false, error: built.error };
-  let items = built.items;
-  if (opts.shared) {
-    // Notes belong to the hex, so they follow it when keys, mode or style change.
-    const prev = new Map();
-    for (const it of await api.getItems(isLabel)) {
-      const meta = it.metadata[MLK_KEY];
-      const c = it.metadata[LABEL_KEY];
-      if (meta && typeof c === "string") prev.set(c, { meta, key: (it.text && it.text.plainText) || "" });
-    }
-    for (const item of items) {
-      const old = prev.get(item.metadata[LABEL_KEY]);
-      const noted = old && !mlkUntouched(old.meta, old.key);
-      if (noted) item.metadata[MLK_KEY] = old.meta;
-      else if (cfg.mlk) item.metadata[MLK_KEY] = { locationKey: mlkDefault(item.text.plainText), isPlayerEditable: true };
-    }
-    // Map Location Keys only looks at TEXT and PROP layer items, so entries live on TEXT.
-    for (const item of items) if (item.metadata[MLK_KEY]) item.layer = "TEXT";
-    if (opts.onlyNoted) items = items.filter((i) => i.metadata[MLK_KEY]);
-  }
   await clearFrom(api);
-  for (let i = 0; i < items.length; i += 250) {
-    await api.addItems(items.slice(i, i + 250));
+  for (let i = 0; i < built.items.length; i += 250) {
+    await api.addItems(built.items.slice(i, i + 250));
   }
-  return { ok: true, count: items.length };
+  return { ok: true, count: built.items.length };
 }
 
-// Shared items: visible labels in SHOW; otherwise invisible holders for Map Location Keys
-// entries (all hexes when sending is on, else only hexes with notes).
-export function applyLabels(cfg) {
-  if (cfg.visibility === "SHOW") return place(OBR.scene.items, cfg, { shared: true });
-  return place(OBR.scene.items, cfg, { shared: true, anchor: true, onlyNoted: !cfg.mlk });
+const hash = (str) => {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+};
+const itemKey = (item) => `${item.metadata[LABEL_KEY]}|${(item.text && item.text.plainText) || ""}`;
+
+// Shared labels are real scene items that Map Location Keys entries live on, so they are
+// never deleted to change how they look. A label is kept (with everything attached to it)
+// while its hex and its number stay the same; only a different number or hex replaces it.
+async function planShared(cfg) {
+  const built = await buildLabels(cfg, { anchor: cfg.visibility !== "SHOW" });
+  if (built.error) return built;
+  const existing = await OBR.scene.items.getItems(isLabel);
+  const have = new Map();
+  const remove = [];
+  for (const it of existing) {
+    const k = itemKey(it);
+    if (have.has(k)) remove.push(it);
+    else have.set(k, it);
+  }
+  const add = [];
+  const update = [];
+  for (const b of built.items) {
+    b.metadata[SIG_KEY] = hash(JSON.stringify([b.position, b.rotation, b.visible, b.text]));
+    const it = have.get(itemKey(b));
+    if (it) {
+      have.delete(itemKey(b));
+      if (it.metadata[SIG_KEY] !== b.metadata[SIG_KEY]) update.push({ id: it.id, b });
+    } else {
+      add.push(b);
+    }
+  }
+  for (const it of have.values()) remove.push(it);
+  const entries = remove.filter((i) => i.metadata[MLK_KEY]);
+  const noted = entries.filter((i) => !mlkUntouched(i.metadata[MLK_KEY], (i.text && i.text.plainText) || ""));
+  return { built, add, update, remove, entries: entries.length, noted: noted.length };
 }
+
+// What a layout change would remove: how many hexes, how many are in Map Location Keys,
+// and how many of those have something written in them.
+export async function previewLabels(cfg) {
+  const p = await planShared(cfg);
+  if (p.error) return { ok: false, error: p.error };
+  return { ok: true, removed: p.remove.length, entries: p.entries, noted: p.noted };
+}
+
+export async function syncLabels(cfg) {
+  const p = await planShared(cfg);
+  if (p.error) return { ok: false, error: p.error };
+  const api = OBR.scene.items;
+  for (let i = 0; i < p.add.length; i += 250) await api.addItems(p.add.slice(i, i + 250));
+  for (let i = 0; i < p.update.length; i += 250) {
+    const group = new Map(p.update.slice(i, i + 250).map((u) => [u.id, u.b]));
+    await api.updateItems(
+      (it) => group.has(it.id),
+      (items) => {
+        for (const it of items) {
+          const b = group.get(it.id);
+          it.position = b.position;
+          it.rotation = b.rotation;
+          it.visible = b.visible;
+          it.text.richText = b.text.richText;
+          it.text.style = b.text.style;
+          it.text.width = b.text.width;
+          it.text.height = b.text.height;
+          it.metadata[SIG_KEY] = b.metadata[SIG_KEY];
+        }
+      }
+    );
+  }
+  const gone = p.remove.map((i) => i.id);
+  for (let i = 0; i < gone.length; i += 200) await api.deleteItems(gone.slice(i, i + 200));
+  return { ok: true, count: p.built.items.length, added: p.add.length, updated: p.update.length, removed: gone.length };
+}
+
+// How many hexes exist and how many of them are in Map Location Keys.
+export async function mlkSummary() {
+  const labels = await OBR.scene.items.getItems(isLabel);
+  const tagged = labels.filter((i) => i.metadata[MLK_KEY]);
+  const noted = tagged.filter((i) => !mlkUntouched(i.metadata[MLK_KEY], (i.text && i.text.plainText) || ""));
+  return { labels: labels.length, sent: tagged.length, noted: noted.length };
+}
+
+// Send the hexes that are on the map to Map Location Keys.
+// "add": hexes already there keep their entries (and notes); the rest are added.
+// "replace": every entry starts over, which erases notes.
+export async function sendToMlk(how) {
+  const api = OBR.scene.items;
+  const labels = await api.getItems(isLabel);
+  if (!labels.length) return { ok: false, error: "Set the first hex first." };
+  const ids = new Set(labels.filter((i) => how === "replace" || !i.metadata[MLK_KEY]).map((i) => i.id));
+  const list = [...ids];
+  for (let i = 0; i < list.length; i += 200) {
+    const group = new Set(list.slice(i, i + 200));
+    await api.updateItems(
+      (it) => group.has(it.id),
+      (items) => {
+        for (const it of items) {
+          it.metadata[MLK_KEY] = { locationKey: mlkDefault(it.text.plainText), isPlayerEditable: true };
+          // Map Location Keys only looks at TEXT and PROP layer items.
+          it.layer = "TEXT";
+        }
+      }
+    );
+  }
+  return { ok: true, count: labels.length, added: list.length };
+}
+
+export const applyLabels = syncLabels;
 export const applyLocalLabels = (cfg) => place(OBR.scene.local, cfg);
 
 // Redraw requests collapse: only the newest one runs, and two never run at once.

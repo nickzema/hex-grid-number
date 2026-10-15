@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.3 - Hexes stay put
+Hiding and style changes update hexes in place so Map Location Keys notes are never lost, only the circled 1 sends hexes (with an Add or Delete-and-add choice and an install note), and layout changes warn before replacing sent hexes.
+
 ## 0.7.2 - Spacing, colors and logo
 Owlbear's 15 starting colors with your own saved after them, selected-text colors, the real Zemaria crown-and-sword logo, even spacing in every mode, and the Map Location Keys layer fix.
 

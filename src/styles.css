@@ -36,10 +36,16 @@ button { cursor: pointer; }
 .icon-btn:disabled { opacity: 0.35; cursor: default; }
 
 .confirm {
-  display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 6px 8px 6px 12px;
-  border-radius: 10px; background: var(--raise); font-size: 14.5px;
+  position: absolute; left: 16px; right: 16px; top: 66px; z-index: 30;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 8px 8px 12px;
+  border-radius: 10px; background: var(--raise-hi); font-size: 14.5px; box-shadow: 0 6px 20px rgba(0,0,0,0.5);
 }
-.confirm span { flex: 1; }
+.confirm span { flex: 1 1 220px; }
+.confirm-btns { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.link-box {
+  flex: 1 1 100%; min-width: 0; height: 30px; padding: 0 8px; border: 0; border-radius: 6px;
+  background: var(--bg); color: #fff; font: 13px "Roboto Mono", monospace;
+}
 
 /* Owlbear-style text toolbar pill */
 .toolbar {

@@ -16,6 +16,11 @@ import {
   hexKey,
   queueLabels,
   clearLabels,
+  previewLabels,
+  mlkSummary,
+  sendToMlk,
+  MLK_INSTALL,
+  ID,
   selectedHexCenter,
   getPersonal,
   getSavedColors,
@@ -33,6 +38,23 @@ const SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48];
 const DESIGN = 500;
 const WHO = ["SHOW", "HIDE", "OFF"];
 const MODE_NAMES = { GRID: "Grid", RING: "Ring", SPIRAL: "Spiral" };
+// Changing any of these can change which hexes exist or what they're called.
+const LAYOUT_KEYS = ["mode", "cols", "rows", "shift", "template", "spiralTemplate", "spiralCount", "lastRing", "start", "dir", "anchor"];
+const SEEN_KEY = `${ID}/mlk-seen`;
+const mlkSeen = () => {
+  try {
+    return localStorage.getItem(SEEN_KEY) === "1";
+  } catch (_) {
+    return false;
+  }
+};
+const markMlkSeen = () => {
+  try {
+    localStorage.setItem(SEEN_KEY, "1");
+  } catch (_) {
+    /* storage unavailable */
+  }
+};
 
 const TOUR = [
   { selector: '[data-tour="set"]', text: "Select a token on the first hex (the center, in Ring and Spiral), then press Set." },
@@ -41,7 +63,7 @@ const TOUR = [
   { selector: '[data-tour="format"]', text: "Fill, border, font and size apply to every hex. Click the sample text for round handles to rotate or resize it." },
   { selector: '[data-tour="players"]', text: "SHOW: everyone sees them. HIDE: players can turn them on for themselves, if they have the extension. OFF: players get nothing." },
   { selector: '[data-tour="eye"]', text: "Hides the numbers just for you in HIDE and OFF. In SHOW they're shared, so it can't." },
-  { selector: '[data-tour="mlk"]', text: "Sends every hex to Map Location Keys, so each hex can hold notes there. Needs that extension." },
+  { selector: '[data-tour="mlk"]', text: `Sends the hexes to Map Location Keys, so each hex can hold notes there. That extension has to be installed: paste ${MLK_INSTALL} into Owlbear's Add Extension box.` },
 ];
 
 const TOUR_START = { selector: '[data-tour="start"]', text: "Click a hex to choose where numbering starts. The arrows pick clockwise or counter-clockwise." };
@@ -108,7 +130,8 @@ function Panel() {
   const [gridType, setGridType] = useState("HEX_HORIZONTAL");
   const [dpi, setDpi] = useState(150);
   const [msg, setMsg] = useState("");
-  const [ask, setAsk] = useState(null); // { kind: "set" | "reset", text }
+  const [ask, setAsk] = useState(null); // { text, link?, buttons: [{ label, run }] }
+  const [sent, setSent] = useState(0); // how many hexes are in Map Location Keys
   const [panel, setPanel] = useState(null); // null | "fill" | "stroke"
   const [probe, setProbe] = useState("");
   const [probeColors, setProbeColors] = useState([]);
@@ -116,10 +139,13 @@ function Panel() {
   const [personal, setPersonalState] = useState(null);
   const cfgRef = useRef(cfg);
   const timer = useRef(null);
+  const sentTimer = useRef(null);
 
   useEffect(() => {
     cfgRef.current = cfg;
   }, [cfg]);
+
+  const refreshSent = () => mlkSummary().then((r) => setSent(r.sent)).catch(() => {});
 
   useEffect(() => {
     const off = [];
@@ -132,6 +158,7 @@ function Panel() {
       setGridType(await OBR.scene.grid.getType());
       setDpi(await OBR.scene.grid.getDpi());
       setReady(true);
+      refreshSent();
     };
     OBR.scene.isReady().then((r) => r && init());
     off.push(OBR.scene.onReadyChange((r) => (r ? init() : setReady(false))));
@@ -144,6 +171,12 @@ function Panel() {
     );
     off.push(
       onPersonalChange(() => OBR.player.getRole().then((r) => setPersonalState(getPersonal(r))))
+    );
+    off.push(
+      OBR.scene.items.onChange(() => {
+        clearTimeout(sentTimer.current);
+        sentTimer.current = setTimeout(refreshSent, 600);
+      })
     );
 
     // Tooltip on the font box: the font name of a selected Owlbear text item.
@@ -174,18 +207,15 @@ function Panel() {
     return () => {
       off.forEach((f) => f());
       clearTimeout(timer.current);
+      clearTimeout(sentTimer.current);
     };
   }, []);
 
+  // Quiet unless hexes were placed or something failed.
   const report = (res) => {
-    if (res.ok) setMsg(cfgRef.current.mlk ? `${res.count} hexes sent to Map Location Keys.` : `${res.count} labels placed.`);
-    else setMsg(res.error);
-  };
-
-  // Hidden-label modes only say something when hexes were sent (or something failed).
-  const quiet = (res) => {
     if (!res.ok) setMsg(res.error);
-    else if (cfgRef.current.mlk) setMsg(`${res.count} hexes sent to Map Location Keys.`);
+    else if (res.added) setMsg(`${res.added} hexes placed.`);
+    refreshSent();
   };
 
   // Messages fade after a few seconds instead of sitting there.
@@ -195,16 +225,30 @@ function Panel() {
     return () => clearTimeout(t);
   }, [msg]);
 
-  // Save a change. In SHOW mode the shared labels redraw shortly after the last change;
-  // in HIDE and OFF each browser redraws its own copy (see background.js).
-  const update = async (patch, { redraw = true } = {}) => {
+  // Save a change and keep the hexes on the map in step. Hexes are updated in place; one is
+  // only removed when its number or hex stops existing, and if that would remove hexes that
+  // are in Map Location Keys, ask first (confirmed: true skips the question).
+  const update = async (patch, { redraw = true, confirmed = false } = {}) => {
     const next = { ...cfgRef.current, ...patch };
+    if (!confirmed && redraw && next.anchor && LAYOUT_KEYS.some((k) => k in patch)) {
+      const pv = await previewLabels(next).catch(() => null);
+      if (pv && pv.ok && pv.entries > 0) {
+        const n = pv.noted;
+        setAsk({
+          text: n
+            ? `This replaces the hexes and erases the notes in ${n} Map Location Keys ${n === 1 ? "entry" : "entries"}. Continue?`
+            : `This replaces the hexes and their ${pv.entries} Map Location Keys entries. Continue?`,
+          buttons: [{ label: "Yes", run: () => (setAsk(null), update(patch, { confirmed: true })) }],
+        });
+        return cfgRef.current;
+      }
+    }
     cfgRef.current = next;
     setCfg(next);
     await saveConfig(next);
-    if (redraw && next.anchor && (next.visibility === "SHOW" || next.mlk || patch.mlk !== undefined)) {
+    if (redraw && next.anchor) {
       clearTimeout(timer.current);
-      timer.current = setTimeout(() => queueLabels(cfgRef.current, next.visibility === "SHOW" ? report : quiet), 350);
+      timer.current = setTimeout(() => queueLabels(cfgRef.current, report), 350);
     }
     return next;
   };
@@ -273,12 +317,15 @@ function Panel() {
     // Check the selection first so the question is only asked when Set can work.
     const res = await selectedHexCenter().catch((e) => ({ ok: false, error: String(e && e.message ? e.message : e) }));
     if (!res.ok) return setMsg(res.error);
-    setAsk({ kind: "set", text: "Move the first hex to the selected token?" });
+    setAsk({ text: "Move the first hex to the selected token?", buttons: [{ label: "Yes", run: doSet }] });
   };
 
   const onReset = () => {
     setMsg("");
-    setAsk({ kind: "reset", text: cfg.mlk ? "Remove all hex labels and their Map Location Keys entries?" : "Remove all hex labels?" });
+    setAsk({
+      text: sent ? "Remove all hex labels and their Map Location Keys entries?" : "Remove all hex labels?",
+      buttons: [{ label: "Yes", run: doReset }],
+    });
   };
 
   const doReset = async () => {
@@ -288,42 +335,62 @@ function Panel() {
       const n = await clearLabels();
       await update({ anchor: null }, { redraw: false });
       setMsg(n ? `${n} labels removed.` : "Labels cleared.");
+      refreshSent();
     } catch (e) {
       setMsg(`Could not reset: ${e && e.message ? e.message : e}`);
     }
   };
 
+  // Hexes are never deleted to hide them: the same labels just turn invisible (or visible).
   const setVisibility = async (visibility) => {
     if (visibility === cfg.visibility) return;
     clearTimeout(timer.current);
-    await update({ visibility }, { redraw: false });
+    await update({ visibility });
+    setMsg(
+      visibility === "SHOW"
+        ? "Players will see hex numbers."
+        : visibility === "HIDE"
+        ? "Players can turn hex numbers on for themselves."
+        : "Players get no hex numbers."
+    );
+  };
+
+  const sendMlk = async (how) => {
+    setAsk(null);
     try {
-      if (visibility === "SHOW") {
-        if (cfgRef.current.anchor) queueLabels(cfgRef.current, report);
-        else setMsg("Players will see hex numbers.");
-      } else {
-        // Shared labels come down; invisible Map Location Keys holders stay where they are needed.
-        if (cfgRef.current.anchor) queueLabels(cfgRef.current, quiet);
-        else await clearLabels();
-        setMsg(visibility === "HIDE" ? "Players can turn hex numbers on for themselves." : "Players get no hex numbers.");
-      }
+      const res = await sendToMlk(how);
+      if (!res.ok) return setMsg(res.error);
+      markMlkSeen();
+      setMsg(res.added ? `${res.added} hexes sent to Map Location Keys.` : `All ${res.count} hexes were already in Map Location Keys.`);
+      refreshSent();
     } catch (e) {
-      setMsg(`Could not change who sees labels: ${e && e.message ? e.message : e}`);
+      setMsg(`Could not send hexes: ${e && e.message ? e.message : e}`);
     }
   };
 
-  const toggleMlk = async () => {
-    const on = !cfg.mlk;
-    await update({ mlk: on });
-    setMsg(
-      !cfg.anchor
-        ? on
-          ? "On. Press Set, then every hex goes to Map Location Keys."
-          : "Off."
-        : on
-        ? "Sending hexes to Map Location Keys."
-        : "Stopped. Hexes with notes stay in Map Location Keys."
-    );
+  // The only thing that sends hexes to Map Location Keys.
+  const onMlk = async () => {
+    setMsg("");
+    if (!cfg.anchor) return setMsg("Press Set first, then send the hexes.");
+    const s = await mlkSummary().catch(() => ({ labels: 0, sent: 0, noted: 0 }));
+    if (!s.labels) return setMsg("The hexes aren't on the map yet. Try again in a moment.");
+    if (s.sent) {
+      setAsk({
+        text: `${s.sent} of ${s.labels} hexes are already in Map Location Keys.${s.noted ? " Delete and add erases their notes." : ""}`,
+        buttons: [
+          { label: "Add", run: () => sendMlk("add") },
+          { label: "Delete and add", run: () => sendMlk("replace") },
+        ],
+      });
+    } else if (!mlkSeen()) {
+      setAsk({
+        text: "This needs the Map Location Keys extension. If you don't have it, paste this into Owlbear's Add Extension box:",
+        link: MLK_INSTALL,
+        buttons: [{ label: "Send hexes", run: () => sendMlk("add") }],
+      });
+    } else {
+      sendMlk("add");
+    }
   };
 
   const sizeNow = Math.round(cfg.textSize * 100);
@@ -347,10 +414,10 @@ function Panel() {
             <Eye off={!shared && !personal} />
           </button>
           <button
-            className={`icon-btn mlk-btn ${cfg.mlk ? "on" : ""}`}
+            className={`icon-btn mlk-btn ${sent ? "on" : ""}`}
             data-tour="mlk"
-            data-tip={cfg.mlk ? "Sending hexes to Map Location Keys" : "Send hexes to Map Location Keys"}
-            onClick={toggleMlk}
+            data-tip={sent ? "Hexes are in Map Location Keys" : "Send hexes to Map Location Keys"}
+            onClick={onMlk}
           >
             <MlkIcon />
           </button>
@@ -366,12 +433,17 @@ function Panel() {
       {ask && (
         <div className="confirm">
           <span>{ask.text}</span>
-          <button className="btn" onClick={ask.kind === "set" ? doSet : doReset}>
-            Yes
-          </button>
-          <button className="btn text" onClick={() => setAsk(null)}>
-            No
-          </button>
+          {ask.link && <input className="link-box" readOnly value={ask.link} onFocus={(e) => e.target.select()} />}
+          <div className="confirm-btns">
+            {ask.buttons.map((b) => (
+              <button key={b.label} className="btn" onClick={b.run}>
+                {b.label}
+              </button>
+            ))}
+            <button className="btn text" onClick={() => setAsk(null)}>
+              {ask.buttons.length === 1 && ask.buttons[0].label === "Yes" ? "No" : "Cancel"}
+            </button>
+          </div>
         </div>
       )}
 

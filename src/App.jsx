@@ -12,6 +12,8 @@ import {
   applyLabels,
   clearLabels,
   setLabelVisibility,
+  snapToHex,
+  isHex,
 } from "./lib.js";
 
 function Field({ label, value, onCommit }) {
@@ -75,6 +77,29 @@ export default function App() {
     await OBR.action.close();
   };
 
+  // Set the first hex from a selected token/image sitting on it (no map click needed).
+  const useSelected = async () => {
+    setMsg("");
+    try {
+      const type = await OBR.scene.grid.getType();
+      if (!isHex(type)) {
+        setMsg("Scene grid is not a hex grid.");
+        return;
+      }
+      const sel = await OBR.player.getSelection();
+      if (!sel || sel.length === 0) {
+        setMsg("Select a token on the first hex, then press Use selected.");
+        return;
+      }
+      const bounds = await OBR.scene.items.getItemBounds([sel[0]]);
+      const center = await snapToHex(bounds.center);
+      const next = await update({ anchor: { x: center.x, y: center.y } });
+      setMsg(`First hex set (${hexKey(next, 0, 0)}).`);
+    } catch (e) {
+      setMsg(`Could not set first hex: ${e && e.message ? e.message : e}`);
+    }
+  };
+
   const show = async () => {
     setBusy(true);
     setMsg("");
@@ -111,6 +136,9 @@ export default function App() {
           <span className="status-value">{cfg.anchor ? hexKey(cfg, 0, 0) : "Not set"}</span>
           <button className="btn anchor-btn" onClick={setAnchor}>
             {cfg.anchor ? "Reset" : "Set"}
+          </button>
+          <button className="btn anchor-btn second" onClick={useSelected}>
+            Use selected
           </button>
         </div>
 

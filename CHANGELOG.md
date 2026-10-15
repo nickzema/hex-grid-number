@@ -1,7 +1,13 @@
 # Changelog
 
+## 0.1.2 - First hex from selection
+Adds Use selected to set the first hex from a selected token, plus error messages when setting it fails.
+
+## 0.1.1 - Manifest fix
+Renamed `manifest` to `manifest_version` so Owlbear accepts the extension.
+
 ## 0.1.0
 First version: hex numbering in AA.01 style.
-- Set the first hex by clicking it; set columns, rows, start column and row.
+- Set the first hex; set columns, rows, start column and row.
 - Labels placed as locked items, GM-only or visible to players.
 - Click any hex with the tool to read its key.

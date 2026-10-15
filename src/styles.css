@@ -8,6 +8,7 @@
 .status-value.over { color: var(--hp-dead); }
 
 .anchor-btn { padding: 4px 10px; margin-left: auto; }
+.anchor-btn.second { margin-left: 6px; }
 
 .action-row { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
 

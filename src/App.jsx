@@ -24,6 +24,7 @@ import {
   mlkSummary,
   sendToMlk,
   MLK_INSTALL,
+  PICK_CHANNEL,
   ID,
   selectedHexCenter,
   getPersonal,
@@ -61,7 +62,7 @@ const markMlkSeen = () => {
 };
 
 const TOUR = [
-  { selector: '[data-tour="set"]', text: "Select a token on the first hex (the center, in Ring and Spiral), then press Set." },
+  { selector: '[data-tour="set"]', text: "Select a token on the first hex (the center, in Ring and Spiral), then press Set. With nothing selected, Set lets you click the hex on the map instead." },
   { selector: '[data-tour="mode"]', text: "Grid counts columns and rows. Ring uses a letter per ring around the center. Spiral is one number winding out from the center." },
   { selector: '[data-tour="sample"]', text: "Click the text to type the first hex's number, like A.01, 01.01 or -7.-3 (Spiral: 1). Drag it to move it." },
   { selector: '[data-tour="format"]', text: "Fill, border, font and size apply to every hex. Click the sample text for round handles to rotate or resize it." },
@@ -397,13 +398,34 @@ function Panel() {
     }
   };
 
+  // Nothing selected: the background script adds a temporary tool for clicking the first hex.
+  const startPicking = async () => {
+    setAsk(null);
+    try {
+      await OBR.broadcast.sendMessage(PICK_CHANNEL, { start: true }, { destination: "LOCAL" });
+      setMsg("Click the first hex on the map.");
+    } catch (e) {
+      setMsg(`Could not start picking: ${e && e.message ? e.message : e}`);
+    }
+  };
+
   const onSet = async () => {
     setMsg("");
-    if (!cfg.anchor) return doSet();
     // Check the selection first so the question is only asked when Set can work.
     const res = await selectedHexCenter().catch((e) => ({ ok: false, error: String(e && e.message ? e.message : e) }));
-    if (!res.ok) return setMsg(res.error);
-    setAsk({ text: "Move the first hex to the selected token?", buttons: [{ label: "Yes", run: doSet }] });
+    if (res.ok) {
+      if (!cfg.anchor) return doSet();
+      return setAsk({ text: "Move the first hex to the selected token?", buttons: [{ label: "Yes", run: doSet }] });
+    }
+    if (!res.none) return setMsg(res.error);
+    if (!cfg.anchor) return startPicking();
+    const s = await mlkSummary().catch(() => ({ sent: 0, noted: 0 }));
+    setAsk({
+      text: s.sent
+        ? `Moving the first hex replaces the hexes and their ${s.sent} Map Location Keys entries${s.noted ? ", erasing their notes" : ""}. Continue?`
+        : "Move the first hex? You'll click the new one on the map.",
+      buttons: [{ label: "Yes", run: startPicking }],
+    });
   };
 
   const onReset = () => {

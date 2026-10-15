@@ -4,8 +4,6 @@ import { fontFor, DEFAULT_FONT } from "./fonts.js";
 export const ID = "com.zemaria.hex-grid-number";
 export const CONFIG_KEY = `${ID}/config`;
 export const LABEL_KEY = `${ID}/label`;
-export const TOOL_ID = `${ID}/tool`;
-export const MODE_READ = `${ID}/read`;
 export const MAX_HEXES = 2500;
 // Estimated width of one character, in font sizes, for sizing the label boxes.
 export const LABEL_WIDTH = 0.7;
@@ -344,10 +342,40 @@ export async function selectedHexCenter() {
   const { type } = await gridInfo();
   if (!isSupported(type)) return { ok: false, error: "This grid type isn't supported." };
   const sel = await OBR.player.getSelection();
-  if (!sel || sel.length === 0) return { ok: false, error: "Select a token on the first hex, then press Set." };
+  if (!sel || sel.length === 0) return { ok: false, none: true, error: "Select a token on the first hex, then press Set." };
   const bounds = await OBR.scene.items.getItemBounds([sel[0]]);
   const center = await snapToHex(bounds.center);
   return { ok: true, center: { x: center.x, y: center.y } };
+}
+
+export const PICK_CHANNEL = `${ID}/pick-request`;
+
+// Corner points of the cell centered at `c`, for outlining it.
+export function cellOutline(type, dpi, lat, c) {
+  if (isHex(type)) {
+    const R = dpi / Math.sqrt(3);
+    const start = type === "HEX_VERTICAL" ? 30 : 0;
+    return [0, 1, 2, 3, 4, 5].map((i) => {
+      const a = ((start + i * 60) * Math.PI) / 180;
+      return { x: c.x + R * Math.cos(a), y: c.y + R * Math.sin(a) };
+    });
+  }
+  const w = lat ? lat.w : dpi;
+  const h = lat ? lat.h : dpi;
+  if (isIso(type)) {
+    return [
+      { x: c.x, y: c.y - h / 2 },
+      { x: c.x + w / 2, y: c.y },
+      { x: c.x, y: c.y + h / 2 },
+      { x: c.x - w / 2, y: c.y },
+    ];
+  }
+  return [
+    { x: c.x - w / 2, y: c.y - h / 2 },
+    { x: c.x + w / 2, y: c.y - h / 2 },
+    { x: c.x + w / 2, y: c.y + h / 2 },
+    { x: c.x - w / 2, y: c.y + h / 2 },
+  ];
 }
 
 // Key of the hex under a scene position, or null if outside the keyed area.
@@ -512,9 +540,10 @@ const hash = (str) => {
 };
 const itemKey = (item) => `${item.metadata[LABEL_KEY]}|${(item.text && item.text.plainText) || ""}`;
 
-// Shared labels are real scene items that Map Location Keys entries live on, so they are
-// never deleted to change how they look. A label is kept (with everything attached to it)
-// while its hex and its number stay the same; only a different number or hex replaces it.
+// Shared labels are real scene items. A label in Map Location Keys is never deleted to change how
+// it looks: it is updated in place (and checked afterwards). A label with nothing in Map Location
+// Keys is simply redrawn when it changes. A label is replaced for good only when its hex or its
+// number stops existing.
 async function planShared(cfg) {
   const built = await buildLabels(cfg, { anchor: cfg.visibility !== "SHOW" });
   if (built.error) return built;
@@ -528,12 +557,20 @@ async function planShared(cfg) {
   }
   const add = [];
   const update = [];
+  const fresh = []; // unchanged hexes with no entry, redrawn
   for (const b of built.items) {
     b.metadata[SIG_KEY] = hash(JSON.stringify([b.position, b.rotation, b.visible, b.text]));
     const it = have.get(itemKey(b));
     if (it) {
       have.delete(itemKey(b));
-      if (it.metadata[SIG_KEY] !== b.metadata[SIG_KEY]) update.push({ id: it.id, b });
+      if (it.metadata[SIG_KEY] !== b.metadata[SIG_KEY]) {
+        if (it.metadata[MLK_KEY]) {
+          update.push({ id: it.id, b, old: it });
+        } else {
+          remove.push(it);
+          fresh.push(b);
+        }
+      }
     } else {
       add.push(b);
     }
@@ -541,7 +578,7 @@ async function planShared(cfg) {
   for (const it of have.values()) remove.push(it);
   const entries = remove.filter((i) => i.metadata[MLK_KEY]);
   const noted = entries.filter((i) => !mlkUntouched(i.metadata[MLK_KEY], (i.text && i.text.plainText) || ""));
-  return { built, add, update, remove, entries: entries.length, noted: noted.length };
+  return { built, add, fresh, update, remove, entries: entries.length, noted: noted.length };
 }
 
 // What a layout change would remove: how many hexes, how many are in Map Location Keys,
@@ -552,13 +589,30 @@ export async function previewLabels(cfg) {
   return { ok: true, removed: p.remove.length, entries: p.entries, noted: p.noted };
 }
 
+const near = (a, b) => Math.abs(a - b) < 0.5;
+const looksUpdated = (got, want) =>
+  got &&
+  near(got.position.x, want.position.x) &&
+  near(got.position.y, want.position.y) &&
+  near(got.rotation || 0, want.rotation || 0) &&
+  got.visible === want.visible &&
+  got.text.style.fillOpacity === want.text.style.fillOpacity &&
+  got.text.style.fontFamily === want.text.style.fontFamily &&
+  got.text.style.fontSize === want.text.style.fontSize;
+
 export async function syncLabels(cfg) {
   const p = await planShared(cfg);
   if (p.error) return { ok: false, error: p.error };
   const api = OBR.scene.items;
-  for (let i = 0; i < p.add.length; i += 250) await api.addItems(p.add.slice(i, i + 250));
+  const adds = [...p.add, ...p.fresh];
+  for (let i = 0; i < adds.length; i += 250) await api.addItems(adds.slice(i, i + 250));
+
+  // Labels in Map Location Keys: update in place, then check Owlbear really took the update.
+  // Any that it didn't are redrawn with their Map Location Keys data carried over.
+  let replaced = 0;
   for (let i = 0; i < p.update.length; i += 250) {
-    const group = new Map(p.update.slice(i, i + 250).map((u) => [u.id, u.b]));
+    const chunk = p.update.slice(i, i + 250);
+    const group = new Map(chunk.map((u) => [u.id, u.b]));
     await api.updateItems(
       (it) => group.has(it.id),
       (items) => {
@@ -575,10 +629,22 @@ export async function syncLabels(cfg) {
         }
       }
     );
+    const now = new Map((await api.getItems((it) => group.has(it.id))).map((it) => [it.id, it]));
+    const stale = chunk.filter((u) => !looksUpdated(now.get(u.id), u.b));
+    if (stale.length) {
+      for (const u of stale) {
+        u.b.metadata[MLK_KEY] = u.old.metadata[MLK_KEY];
+        u.b.layer = u.old.layer;
+      }
+      await api.deleteItems(stale.map((u) => u.id));
+      await api.addItems(stale.map((u) => u.b));
+      replaced += stale.length;
+    }
   }
+
   const gone = p.remove.map((i) => i.id);
   for (let i = 0; i < gone.length; i += 200) await api.deleteItems(gone.slice(i, i + 200));
-  return { ok: true, count: p.built.items.length, added: p.add.length, updated: p.update.length, removed: gone.length };
+  return { ok: true, count: p.built.items.length, added: p.add.length, updated: p.update.length - replaced, replaced, removed: p.remove.length - p.fresh.length };
 }
 
 // How many hexes exist and how many of them are in Map Location Keys.

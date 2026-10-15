@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.1 - Click to set
+Set with nothing selected adds a temporary toolbar icon to click the first hex on the map, and moving or restyling hexes now redraws them reliably.
+
 ## 0.8.0 - Square and isometric grids
 Numbers square and isometric grids by columns and rows, and the panel and sample follow the scene's grid type.
 

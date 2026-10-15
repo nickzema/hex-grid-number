@@ -9,6 +9,9 @@ import {
   SEPARATORS,
   hexCount,
   layout,
+  isHex,
+  getLattice,
+  GRID_NAMES,
   ringInfo,
   templateFor,
   loadConfig,
@@ -191,6 +194,7 @@ function Panel() {
   const [cfg, setCfg] = useState(DEFAULTS);
   const [gridType, setGridType] = useState("HEX_HORIZONTAL");
   const [dpi, setDpi] = useState(150);
+  const [lattice, setLattice] = useState(null); // square / isometric cell geometry
   const [msg, setMsg] = useState("");
   const [ask, setAsk] = useState(null); // { text, link?, buttons: [{ label, run }] }
   const [sent, setSent] = useState(0); // how many hexes are in Map Location Keys
@@ -206,6 +210,16 @@ function Panel() {
   useEffect(() => {
     cfgRef.current = cfg;
   }, [cfg]);
+
+  useEffect(() => {
+    let live = true;
+    getLattice(gridType, dpi)
+      .then((l) => live && setLattice(l))
+      .catch(() => live && setLattice(null));
+    return () => {
+      live = false;
+    };
+  }, [gridType, dpi]);
 
   const refreshSent = () => mlkSummary().then((r) => setSent(r.sent)).catch(() => {});
 
@@ -276,7 +290,7 @@ function Panel() {
   // Quiet unless hexes were placed or something failed.
   const report = (res) => {
     if (!res.ok) setMsg(res.error);
-    else if (res.added) setMsg(`${res.added} hexes placed.`);
+    else if (res.added) setMsg(`${res.added} ${isHex(gridType) ? "hexes" : "cells"} placed.`);
     refreshSent();
   };
 
@@ -347,21 +361,25 @@ function Panel() {
   }
 
   const flat = gridType !== "HEX_VERTICAL";
-  const total = hexCount(cfg);
+  const hexGrid = isHex(gridType);
+  const total = hexCount(cfg, gridType);
   const tooMany = total > MAX_HEXES;
-  const ring = cfg.mode === "RING" ? ringInfo(cfg) : null;
+  const ring = hexGrid && cfg.mode === "RING" ? ringInfo(cfg) : null;
   const summary = tooMany
     ? `${total} hexes is over the max of ${MAX_HEXES}.`
     : ring && ring.error
     ? ring.error
-    : `${total} hexes.`;
+    : `${total} ${hexGrid ? "hexes" : "cells"}.`;
   const problem = tooMany || (ring && ring.error);
-  const tour = TOUR.flatMap((t, i) => (i === 1 && cfg.mode !== "GRID" ? [t, TOUR_START] : [t]));
-  const previewCfg = { ...cfg, template: templateFor(cfg) };
+  const tour = TOUR.filter((t) => hexGrid || t.selector !== '[data-tour="mode"]').flatMap((t) =>
+    t.selector === '[data-tour="mode"]' && cfg.mode !== "GRID" ? [t, TOUR_START] : [t]
+  );
+  const modeCfg = hexGrid ? cfg : { ...cfg, mode: "GRID" }; // Ring and Spiral are hex-only
+  const previewCfg = { ...modeCfg, template: templateFor(modeCfg) };
   // Longest number in this layout (the labels' shared box width, shown in the sample).
   let maxLen = 1;
   if (cfg.align === "LEFT" || cfg.align === "RIGHT") {
-    const lay = layout(cfg, gridType, dpi);
+    const lay = layout(cfg, gridType, dpi, lattice);
     if (lay && lay.items) maxLen = lay.items.reduce((m, h) => Math.max(m, h.key.length), 1);
   }
   const shared = cfg.visibility === "SHOW";
@@ -566,19 +584,24 @@ function Panel() {
 
       <div className="body">
         <div className="stack">
-          <div className="modes" data-tour="mode">
-            {MODES.map((m) => (
-              <button key={m} className={`seg-btn ${cfg.mode === m ? "active" : ""}`} onClick={() => update({ mode: m })}>
-                {MODE_NAMES[m]}
-              </button>
-            ))}
-          </div>
+          {hexGrid ? (
+            <div className="modes" data-tour="mode">
+              {MODES.map((m) => (
+                <button key={m} className={`seg-btn ${cfg.mode === m ? "active" : ""}`} onClick={() => update({ mode: m })}>
+                  {MODE_NAMES[m]}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="modes grid-kind">{GRID_NAMES[gridType] || "Grid"}</div>
+          )}
 
-          {cfg.mode === "GRID" && (
+          {(cfg.mode === "GRID" || !hexGrid) && (
             <>
               <Field label="Columns" value={cfg.cols} onCommit={(v) => update({ cols: clampInt(v, 1, 999, cfg.cols) })} />
               <Field label="Rows" value={cfg.rows} onCommit={(v) => update({ rows: clampInt(v, 1, 999, cfg.rows) })} />
-              <Row label="Offset">
+              {!hexGrid && <div className="row-spacer" />}
+              {hexGrid && <Row label="Offset">
                 <div className="seg-in">
                   <button className={`seg-btn arrow ${cfg.shift === 1 ? "active" : ""}`} data-tip="Second one sits lower" onClick={() => update({ shift: 1 })}>
                     {offsetIcons[0]}
@@ -587,10 +610,10 @@ function Panel() {
                     {offsetIcons[1]}
                   </button>
                 </div>
-              </Row>
+              </Row>}
             </>
           )}
-          {cfg.mode === "RING" && (
+          {hexGrid && cfg.mode === "RING" && (
             <Field
               label="Last ring"
               numeric={false}
@@ -598,10 +621,10 @@ function Panel() {
               onCommit={(v) => update({ lastRing: String(v).trim() || cfg.lastRing })}
             />
           )}
-          {cfg.mode === "SPIRAL" && (
+          {hexGrid && cfg.mode === "SPIRAL" && (
             <Field label="Hexes" value={cfg.spiralCount} onCommit={(v) => update({ spiralCount: clampInt(v, 1, MAX_HEXES, cfg.spiralCount) })} />
           )}
-          {cfg.mode !== "GRID" && <StartBox cfg={cfg} type={gridType} onChange={(patch) => update(patch)} />}
+          {hexGrid && cfg.mode !== "GRID" && <StartBox cfg={cfg} type={gridType} onChange={(patch) => update(patch)} />}
 
           <Row label="Players" tour="players">
             <div className="seg-in">
@@ -622,13 +645,15 @@ function Panel() {
         <Preview
           cfg={previewCfg}
           flat={flat}
+          type={gridType}
+          lattice={lattice}
           dpi={dpi}
           maxLen={maxLen}
           onChange={(patch) => update(patch)}
-          onTemplate={(t) => update(cfg.mode === "SPIRAL" ? { spiralTemplate: t } : { template: t })}
+          onTemplate={(t) => update(previewCfg.mode === "SPIRAL" ? { spiralTemplate: t } : { template: t })}
           onInvalid={(t) =>
             setMsg(
-              cfg.mode === "SPIRAL"
+              previewCfg.mode === "SPIRAL"
                 ? `"${t}" isn't a number. Use something like 1, 0 or 001.`
                 : `"${t}" isn't a key. Use column then row, like A.01 or 01.01. Separators: ${SEPARATORS.trim()} or a space.`
             )

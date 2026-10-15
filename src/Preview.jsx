@@ -19,8 +19,8 @@ function luminance(hex) {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 
-function hexPoints(flat, cx, cy) {
-  const R = D / SQRT3;
+function hexPoints(flat, cx, cy, d = D) {
+  const R = d / SQRT3;
   const start = flat ? 0 : 30;
   const pts = [];
   for (let i = 0; i < 6; i++) {
@@ -54,7 +54,7 @@ const EdgeIcon = ({ side }) => (
   </svg>
 );
 
-export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTemplate, onInvalid }) {
+export default function Preview({ cfg, flat, type, lattice, dpi, maxLen = 1, onChange, onTemplate, onInvalid }) {
   const boxRef = useRef(null);
   const labelRef = useRef(null);
   const inputRef = useRef(null);
@@ -70,17 +70,26 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
     if (!selected) setText(cfg.template);
   }, [cfg.template, selected]);
 
+  // Hex: D is one hex. Square: D is one side. Isometric: the diamond is drawn to scale, shrunk
+  // if it wouldn't fit, and everything else (text size, offsets) shrinks with it.
+  const kind = type === "SQUARE" ? "square" : type === "ISOMETRIC" || type === "DIMETRIC" ? "iso" : "hex";
+  const cellW = kind === "iso" && lattice ? lattice.w : dpi || 150;
+  const cellH = kind === "iso" && lattice ? lattice.h : dpi || 150;
+  const Dp = kind === "iso" ? D * Math.min(1, (W - 24) / (cellW * (D / (dpi || 150))), (H - 24) / (cellH * (D / (dpi || 150)))) : D;
+  const pxW = (cellW * Dp) / (dpi || 150);
+  const pxH = (cellH * Dp) / (dpi || 150);
+
   const v = live ? { ...cfg, ...live } : cfg;
   const font = fontFor(v);
-  const fontPx = v.textSize * D;
-  const cx = W / 2 + v.ox * D;
-  const cy = H / 2 + v.oy * D;
+  const fontPx = v.textSize * Dp;
+  const cx = W / 2 + v.ox * Dp;
+  const cy = H / 2 + v.oy * Dp;
   const valid = !!parseFor(cfg.mode, text);
   useLayoutEffect(() => {
     const w = labelRef.current ? labelRef.current.offsetWidth : 0;
     if (w !== tw) setTw(w);
   });
-  const hexHalf = flat ? D / 2 : D / SQRT3;
+  const hexHalf = kind === "square" ? Dp / 2 : kind === "iso" ? pxH / 2 : flat ? Dp / 2 : Dp / SQRT3;
 
   const setLiveBoth = (patch) => {
     liveRef.current = { ...(liveRef.current || {}), ...patch };
@@ -90,7 +99,7 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
   const center = () => {
     const r = boxRef.current.getBoundingClientRect();
     const l = liveRef.current ? { ...cfg, ...liveRef.current } : cfg;
-    return { x: r.left + W / 2 + l.ox * D, y: r.top + H / 2 + l.oy * D };
+    return { x: r.left + W / 2 + l.ox * Dp, y: r.top + H / 2 + l.oy * Dp };
   };
 
   const begin = (kind, e) => {
@@ -137,8 +146,8 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
       const dy = e.clientY - g.sy;
       if (!g.moved && Math.hypot(dx, dy) < 3) return;
       g.moved = true;
-      const p = snapPos(g.ox0 * D + dx, g.oy0 * D + dy, g.lh);
-      setLiveBoth({ ox: clamp(p.x / D, -0.9, 0.9), oy: clamp(p.y / D, -0.9, 0.9) });
+      const p = snapPos(g.ox0 * Dp + dx, g.oy0 * Dp + dy, g.lh);
+      setLiveBoth({ ox: clamp(p.x / Dp, -0.9, 0.9), oy: clamp(p.y / Dp, -0.9, 0.9) });
     } else if (g.kind === "rotate") {
       const c = center();
       let a = (Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180) / Math.PI + 90;
@@ -204,7 +213,7 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
     }
   };
 
-  const strokePx = (v.strokeWidth || 0) * (D / (dpi || 150));
+  const strokePx = (v.strokeWidth || 0) * (Dp / (dpi || 150));
   const textStyle = {
     fontFamily: font.css,
     fontSize: `${fontPx}px`,
@@ -219,7 +228,7 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
   // numbers sit against its left or right edge. Here the frame stays snug around the text,
   // and the text moves to where that edge would be.
   const LABEL_PAD = 6;
-  const boxW = Math.max(maxLen, text.length, 1) * fontPx * LABEL_WIDTH + 8 * (D / (dpi || 150));
+  const boxW = Math.max(maxLen, text.length, 1) * fontPx * LABEL_WIDTH + 8 * (Dp / (dpi || 150));
   const shift = v.align === "LEFT" ? (tw - boxW) / 2 - LABEL_PAD : v.align === "RIGHT" ? (boxW - tw) / 2 + LABEL_PAD : 0;
 
   const handle = (kind, extra) => ({
@@ -234,7 +243,13 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
     <div className="preview" data-tour="sample" ref={boxRef} style={{ width: W, height: H }} onPointerDown={deselect}>
       <svg width={W} height={H} className="preview-hex">
         <polygon
-          points={hexPoints(flat, W / 2, H / 2)}
+          points={
+            kind === "square"
+              ? `${W / 2 - Dp / 2},${H / 2 - Dp / 2} ${W / 2 + Dp / 2},${H / 2 - Dp / 2} ${W / 2 + Dp / 2},${H / 2 + Dp / 2} ${W / 2 - Dp / 2},${H / 2 + Dp / 2}`
+              : kind === "iso"
+              ? `${W / 2},${H / 2 - pxH / 2} ${W / 2 + pxW / 2},${H / 2} ${W / 2},${H / 2 + pxH / 2} ${W / 2 - pxW / 2},${H / 2}`
+              : hexPoints(flat, W / 2, H / 2)
+          }
           fill={luminance(v.fillColor) > 0.45 ? "#2d3146" : "#D9DCE6"}
           stroke={luminance(v.fillColor) > 0.45 ? "#6d7391" : "#9097b0"}
           strokeWidth="2"

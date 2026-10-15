@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.0 - Square and isometric grids
+Numbers square and isometric grids by columns and rows, and the panel and sample follow the scene's grid type.
+
 ## 0.7.7 - Smaller handles
 The rotate and resize buttons on the sample are smaller and sit farther from the text.
 

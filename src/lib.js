@@ -178,7 +178,8 @@ export function ringInfo(cfg) {
   return { rings, total: 1 + 3 * rings * (rings + 1) };
 }
 
-export function hexCount(cfg) {
+export function hexCount(cfg, type) {
+  if (type && !isHex(type)) return cfg.cols * cfg.rows;
   if (cfg.mode === "RING") {
     const info = ringInfo(cfg);
     return info.error ? 0 : info.total;
@@ -192,11 +193,70 @@ export function hexCount(cfg) {
 export function isHex(type) {
   return type === "HEX_VERTICAL" || type === "HEX_HORIZONTAL";
 }
+export const isIso = (type) => type === "ISOMETRIC" || type === "DIMETRIC";
+// Grids this extension can number: hex, square and isometric.
+export const isSupported = (type) => isHex(type) || type === "SQUARE" || isIso(type);
+export const GRID_NAMES = { SQUARE: "Square grid", ISOMETRIC: "Isometric grid", DIMETRIC: "Dimetric grid" };
+
+// Square and isometric cells sit on a lattice: column c, row r is c * u + r * v from the first cell.
+// Square: u goes right, v goes down. Isometric and dimetric: u goes down-right, v goes down-left, so
+// the first cell is the top corner of a diamond of cells. The diamond cells' size comes from
+// Owlbear itself (where it snaps to), so it follows whatever its isometric angle is.
+const latticeCache = new Map();
+export async function getLattice(type, dpi) {
+  if (isHex(type) || !isSupported(type)) return null;
+  const key = `${type}|${dpi}`;
+  if (latticeCache.has(key)) return latticeCache.get(key);
+  let lat = null;
+  if (type === "SQUARE") {
+    lat = { u: { x: dpi, y: 0 }, v: { x: 0, y: dpi }, w: dpi, h: dpi };
+  } else {
+    try {
+      lat = await probeLattice(dpi);
+    } catch (_) {
+      lat = null;
+    }
+    if (!lat) {
+      const w = type === "ISOMETRIC" ? dpi * SQRT3_2 * 2 : dpi * 2;
+      const h = dpi;
+      lat = { u: { x: w / 2, y: h / 2 }, v: { x: -w / 2, y: h / 2 }, w, h };
+    }
+  }
+  latticeCache.set(key, lat);
+  return lat;
+}
+
+// Find the width and height of one diamond by asking Owlbear where it snaps to.
+async function probeLattice(dpi) {
+  const c0 = await OBR.scene.grid.snapPosition({ x: 0, y: 0 }, 1, false, true);
+  const same = (p) => Math.hypot(p.x - c0.x, p.y - c0.y) < 1;
+  const cross = async (dx, dy) => {
+    const at = (d) => OBR.scene.grid.snapPosition({ x: c0.x + dx * d, y: c0.y + dy * d }, 1, false, true);
+    let lo = 0;
+    let hi = dpi * 4;
+    if (same(await at(hi))) return null;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      if (same(await at(mid))) lo = mid;
+      else hi = mid;
+    }
+    const n = await at(hi + dpi * 0.03);
+    return { x: n.x - c0.x, y: n.y - c0.y };
+  };
+  const right = await cross(1, 0);
+  const down = await cross(0, 1);
+  if (!right || !down) return null;
+  const w = Math.abs(right.x);
+  const h = Math.abs(down.y);
+  if (!(w > 1) || !(h > 1)) return null;
+  return { u: { x: w / 2, y: h / 2 }, v: { x: -w / 2, y: h / 2 }, w, h };
+}
 
 // Offset of cell (c, r) from the anchor hex center.
 // HEX_VERTICAL: pointy-top hexes in rows, dpi = hex width. Every second row shifts sideways.
 // HEX_HORIZONTAL: flat-top hexes in columns, dpi = hex height. Every second column shifts up/down.
-function cellOffset(type, dpi, shift, c, r) {
+function cellOffset(type, dpi, shift, c, r, lat) {
+  if (lat) return { x: c * lat.u.x + r * lat.v.x, y: c * lat.u.y + r * lat.v.y };
   if (type === "HEX_VERTICAL") {
     return { x: c * dpi + (mod2(r) ? (shift * dpi) / 2 : 0), y: r * dpi * SQRT3_2 };
   }
@@ -230,9 +290,12 @@ function ringOffsets(n, dirs) {
 }
 
 // Every keyed hex as { key, x, y }, x/y measured from the anchor hex center.
-export function layout(cfg, type, dpi) {
+export function layout(cfg, type, dpi, lat) {
   const out = [];
-  if (cfg.mode === "RING") {
+  // Ring and Spiral are hex-only; square and isometric grids use columns and rows.
+  const mode = isHex(type) ? cfg.mode : "GRID";
+  if (!isHex(type) && !lat) return { error: "Reading the grid. Try again in a moment." };
+  if (mode === "RING") {
     const info = ringInfo(cfg);
     if (info.error) return { error: info.error };
     const p = parseTemplate(cfg.template) || parseTemplate(DEFAULTS.template);
@@ -242,7 +305,7 @@ export function layout(cfg, type, dpi) {
       if (p.alpha && p.lower) col = col.toLowerCase();
       ringOffsets(ring, dirs).forEach((o, i) => out.push({ key: `${col}${p.sep}${num(p.rowStart + i, p.rowWidth)}`, x: o.x, y: o.y }));
     }
-  } else if (cfg.mode === "SPIRAL") {
+  } else if (mode === "SPIRAL") {
     const sp = parseSpiral(cfg.spiralTemplate) || { start: 1, width: 1 };
     const dirs = neighborDirs(type, dpi, cfg.start, cfg.dir);
     for (let ring = 0; out.length < cfg.spiralCount; ring++) {
@@ -258,7 +321,7 @@ export function layout(cfg, type, dpi) {
   } else {
     for (let r = 0; r < cfg.rows; r++) {
       for (let c = 0; c < cfg.cols; c++) {
-        const o = cellOffset(type, dpi, cfg.shift, c, r);
+        const o = cellOffset(type, dpi, cfg.shift, c, r, isHex(type) ? null : lat);
         out.push({ key: hexKey(cfg, c, r), x: o.x, y: o.y });
       }
     }
@@ -268,7 +331,7 @@ export function layout(cfg, type, dpi) {
 
 async function gridInfo() {
   const [type, dpi] = await Promise.all([OBR.scene.grid.getType(), OBR.scene.grid.getDpi()]);
-  return { type, dpi };
+  return { type, dpi, lat: await getLattice(type, dpi) };
 }
 
 // Center of the hex under a scene position.
@@ -279,7 +342,7 @@ export async function snapToHex(position) {
 // Center of the hex under the first selected item.
 export async function selectedHexCenter() {
   const { type } = await gridInfo();
-  if (!isHex(type)) return { ok: false, error: "Scene grid is not a hex grid." };
+  if (!isSupported(type)) return { ok: false, error: "This grid type isn't supported." };
   const sel = await OBR.player.getSelection();
   if (!sel || sel.length === 0) return { ok: false, error: "Select a token on the first hex, then press Set." };
   const bounds = await OBR.scene.items.getItemBounds([sel[0]]);
@@ -291,10 +354,10 @@ export async function selectedHexCenter() {
 export async function keyAt(position) {
   const cfg = await loadConfig();
   if (!cfg.anchor) return null;
-  const { type, dpi } = await gridInfo();
-  if (!isHex(type)) return null;
+  const { type, dpi, lat } = await gridInfo();
+  if (!isSupported(type)) return null;
   const center = await snapToHex(position);
-  const lay = layout(cfg, type, dpi);
+  const lay = layout(cfg, type, dpi, lat);
   if (lay.error) return null;
   const dx = center.x - cfg.anchor.x;
   const dy = center.y - cfg.anchor.y;
@@ -369,10 +432,10 @@ async function getCalib() {
 // Text items for every hex, or { error } if the scene can't take them.
 async function buildLabels(cfg, opts = {}) {
   if (!cfg.anchor) return { error: "Set the first hex first." };
-  const { type, dpi } = await gridInfo();
-  if (!isHex(type)) return { error: "Scene grid is not a hex grid." };
-  if (hexCount(cfg) > MAX_HEXES) return { error: `Too many hexes (max ${MAX_HEXES}).` };
-  const lay = layout(cfg, type, dpi);
+  const { type, dpi, lat } = await gridInfo();
+  if (!isSupported(type)) return { error: "This grid type isn't supported." };
+  if (hexCount(cfg, type) > MAX_HEXES) return { error: `Too many hexes (max ${MAX_HEXES}).` };
+  const lay = layout(cfg, type, dpi, lat);
   if (lay.error) return { error: lay.error };
 
   const font = fontFor(cfg);

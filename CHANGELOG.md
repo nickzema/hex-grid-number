@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.5 - Flat-top icon
+The extension icon is now a flat-topped hexagon.
+
 ## 0.7.4 - Text alignment
 Left, center or right alignment for the numbers, with equal-width label boxes so they line up on every hex.
 

@@ -7,6 +7,8 @@ export const LABEL_KEY = `${ID}/label`;
 export const TOOL_ID = `${ID}/tool`;
 export const MODE_READ = `${ID}/read`;
 export const MAX_HEXES = 2500;
+// Estimated width of one character, in font sizes, for sizing the label boxes.
+export const LABEL_WIDTH = 0.7;
 // Map Location Keys (by Alvaro Cavalcanti) lists every text item that carries this metadata.
 export const MLK_KEY = "es.memorablenaton.map-location-keys/metadata";
 export const MLK_INSTALL = "https://map-location-keys.vercel.app/manifest.json";
@@ -382,7 +384,7 @@ async function buildLabels(cfg, opts = {}) {
   const cal = await getCalib();
   // Every label box is as wide as the longest number, so Left and Right line the numbers up.
   const longest = lay.items.reduce((m, hx) => Math.max(m, hx.key.length), 1);
-  const w = longest * fontPx * 0.8 + 8;
+  const w = longest * fontPx * LABEL_WIDTH + 8;
   const align = ["LEFT", "RIGHT"].includes(cfg.align) ? cfg.align : "CENTER";
 
   const items = [];

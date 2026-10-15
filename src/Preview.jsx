@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fontFor } from "./fonts.js";
-import { parseFor } from "./lib.js";
+import { parseFor, LABEL_WIDTH } from "./lib.js";
 
 // The preview hex is drawn D px tall (flat-top) or wide (pointy-top), the same
 // way the grid's dpi measures a hex. Label offset and size are stored in
@@ -64,6 +64,7 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
   const [live, setLive] = useState(null);
   const [selected, setSelected] = useState(false);
   const [text, setText] = useState(cfg.template);
+  const [tw, setTw] = useState(0); // width of the sample label as drawn
 
   useEffect(() => {
     if (!selected) setText(cfg.template);
@@ -75,6 +76,10 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
   const cx = W / 2 + v.ox * D;
   const cy = H / 2 + v.oy * D;
   const valid = !!parseFor(cfg.mode, text);
+  useLayoutEffect(() => {
+    const w = labelRef.current ? labelRef.current.offsetWidth : 0;
+    if (w !== tw) setTw(w);
+  });
   const hexHalf = flat ? D / 2 : D / SQRT3;
 
   const setLiveBoth = (patch) => {
@@ -209,10 +214,13 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
     WebkitTextStroke: strokePx > 0 ? `${strokePx}px ${v.strokeColor}` : "0",
     paintOrder: "stroke fill",
     lineHeight: 1.4,
-    textAlign: (v.align || "CENTER").toLowerCase(),
   };
-  // With Left or Right the label box is as wide as the longest number, like on the map.
-  const boxW = v.align === "LEFT" || v.align === "RIGHT" ? Math.max(maxLen, text.length, 1) * fontPx * 0.8 + 12 : undefined;
+  // Left and Right: on the map every label box is as wide as the longest number and the
+  // numbers sit against its left or right edge. Here the frame stays snug around the text,
+  // and the text moves to where that edge would be.
+  const LABEL_PAD = 6;
+  const boxW = Math.max(maxLen, text.length, 1) * fontPx * LABEL_WIDTH + 8 * (D / (dpi || 150));
+  const shift = v.align === "LEFT" ? (tw - boxW) / 2 - LABEL_PAD : v.align === "RIGHT" ? (boxW - tw) / 2 + LABEL_PAD : 0;
 
   const handle = (kind, extra) => ({
     onPointerDown: (e) => begin(kind, e),
@@ -237,7 +245,7 @@ export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTempla
       <div
         ref={labelRef}
         className={`preview-label ${selected ? "selected" : ""}`}
-        style={{ left: cx, top: cy, width: boxW, boxSizing: "border-box", transform: `translate(-50%, -50%) rotate(${v.rot}deg)` }}
+        style={{ left: cx, top: cy, transform: `translate(-50%, -50%) rotate(${v.rot}deg) translateX(${shift}px)` }}
         {...handle("move")}
       >
         <span className="preview-text" style={{ ...textStyle, visibility: selected ? "hidden" : "visible" }}>

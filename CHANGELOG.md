@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.6 - Snug sample frame
+The sample's frame stays snug around the text, and Left or Right moves the text instead; label boxes are sized a bit tighter.
+
 ## 0.7.5 - Flat-top icon
 The extension icon is now a flat-topped hexagon.
 

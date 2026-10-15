@@ -8,6 +8,7 @@ import {
   MODES,
   SEPARATORS,
   hexCount,
+  layout,
   ringInfo,
   templateFor,
   loadConfig,
@@ -102,6 +103,67 @@ const MlkIcon = () => (
     </text>
   </svg>
 );
+
+const ALIGNS = [
+  ["LEFT", "Left"],
+  ["CENTER", "Center"],
+  ["RIGHT", "Right"],
+];
+
+// Four lines, long and short, pushed to the left, middle or right.
+const AlignIcon = ({ align }) => {
+  const line = (y, len) => {
+    const x = align === "LEFT" ? 4 : align === "RIGHT" ? 20 - len : 12 - len / 2;
+    return <path d={`M${x} ${y}h${len}`} />;
+  };
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      {line(6, 16)}
+      {line(10.7, 10)}
+      {line(15.3, 16)}
+      {line(20, 10)}
+    </svg>
+  );
+};
+
+function AlignMenu({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+  return (
+    <div className="align-wrap" ref={ref}>
+      <button className="align-btn" data-tip="Text alignment" aria-label="Text alignment" onClick={() => setOpen(!open)}>
+        <AlignIcon align={value} />
+        <svg width="10" height="6" viewBox="0 0 10 6">
+          <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="align-menu">
+          {ALIGNS.map(([k, name]) => (
+            <button
+              key={k}
+              className={`fmt-btn ${value === k ? "active" : ""}`}
+              data-tip={name}
+              aria-label={name}
+              onClick={() => {
+                onChange(k);
+                setOpen(false);
+              }}
+            >
+              <AlignIcon align={k} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const Eye = ({ off }) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -296,6 +358,12 @@ function Panel() {
   const problem = tooMany || (ring && ring.error);
   const tour = TOUR.flatMap((t, i) => (i === 1 && cfg.mode !== "GRID" ? [t, TOUR_START] : [t]));
   const previewCfg = { ...cfg, template: templateFor(cfg) };
+  // Longest number in this layout (the labels' shared box width, shown in the sample).
+  let maxLen = 1;
+  if (cfg.align === "LEFT" || cfg.align === "RIGHT") {
+    const lay = layout(cfg, gridType, dpi);
+    if (lay && lay.items) maxLen = lay.items.reduce((m, h) => Math.max(m, h.key.length), 1);
+  }
   const shared = cfg.visibility === "SHOW";
 
   const doSet = async () => {
@@ -493,6 +561,7 @@ function Panel() {
         <button className={`fmt-btn italic ${cfg.italic ? "active" : ""}`} data-tip="Italic" onClick={() => update({ italic: !cfg.italic })}>
           I
         </button>
+        <AlignMenu value={cfg.align || "CENTER"} onChange={(align) => update({ align })} />
       </div>
 
       <div className="body">
@@ -554,6 +623,7 @@ function Panel() {
           cfg={previewCfg}
           flat={flat}
           dpi={dpi}
+          maxLen={maxLen}
           onChange={(patch) => update(patch)}
           onTemplate={(t) => update(cfg.mode === "SPIRAL" ? { spiralTemplate: t } : { template: t })}
           onInvalid={(t) =>

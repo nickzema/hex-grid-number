@@ -54,7 +54,7 @@ const EdgeIcon = ({ side }) => (
   </svg>
 );
 
-export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvalid }) {
+export default function Preview({ cfg, flat, dpi, maxLen = 1, onChange, onTemplate, onInvalid }) {
   const boxRef = useRef(null);
   const labelRef = useRef(null);
   const inputRef = useRef(null);
@@ -209,7 +209,10 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
     WebkitTextStroke: strokePx > 0 ? `${strokePx}px ${v.strokeColor}` : "0",
     paintOrder: "stroke fill",
     lineHeight: 1.4,
+    textAlign: (v.align || "CENTER").toLowerCase(),
   };
+  // With Left or Right the label box is as wide as the longest number, like on the map.
+  const boxW = v.align === "LEFT" || v.align === "RIGHT" ? Math.max(maxLen, text.length, 1) * fontPx * 0.8 + 12 : undefined;
 
   const handle = (kind, extra) => ({
     onPointerDown: (e) => begin(kind, e),
@@ -234,7 +237,7 @@ export default function Preview({ cfg, flat, dpi, onChange, onTemplate, onInvali
       <div
         ref={labelRef}
         className={`preview-label ${selected ? "selected" : ""}`}
-        style={{ left: cx, top: cy, transform: `translate(-50%, -50%) rotate(${v.rot}deg)` }}
+        style={{ left: cx, top: cy, width: boxW, boxSizing: "border-box", transform: `translate(-50%, -50%) rotate(${v.rot}deg)` }}
         {...handle("move")}
       >
         <span className="preview-text" style={{ ...textStyle, visibility: selected ? "hidden" : "visible" }}>

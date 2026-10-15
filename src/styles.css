@@ -77,6 +77,17 @@ button { cursor: pointer; }
 .fmt-btn.bold { font-weight: 700; }
 .fmt-btn.italic { font-style: italic; font-family: Georgia, "Times New Roman", serif; }
 .fmt-btn.active { background: rgba(187,153,255,0.22); color: var(--accent); }
+.align-wrap { position: relative; flex-shrink: 0; }
+.align-btn {
+  height: 34px; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: inherit;
+  display: flex; align-items: center; gap: 4px;
+}
+.align-btn:hover { background: var(--raise-hi); }
+.align-menu {
+  position: absolute; top: 40px; right: 0; z-index: 40; display: flex; gap: 2px; padding: 4px;
+  border-radius: 10px; background: var(--raise-hi); box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+}
+.align-menu .fmt-btn { display: flex; align-items: center; justify-content: center; }
 
 /* body: stacked controls left, big hex right */
 .body { display: flex; gap: 12px; align-items: flex-start; }

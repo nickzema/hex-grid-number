@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.4 - Text alignment
+Left, center or right alignment for the numbers, with equal-width label boxes so they line up on every hex.
+
 ## 0.7.3 - Hexes stay put
 Hiding and style changes update hexes in place so Map Location Keys notes are never lost, only the circled 1 sends hexes (with an Add or Delete-and-add choice and an install note), and layout changes warn before replacing sent hexes.
 

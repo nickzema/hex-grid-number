@@ -36,6 +36,7 @@ export const DEFAULTS = {
   textSize: 0.2, // fraction of the hex size (grid dpi)
   bold: true,
   italic: false,
+  align: "CENTER", // LEFT | CENTER | RIGHT: how a number sits in its label box
   fillColor: "#111111",
   strokeColor: "#FCFBF8",
   strokeWidth: 2, // scene px, 0 = no border
@@ -379,12 +380,15 @@ async function buildLabels(cfg, opts = {}) {
   const sin = Math.sin(theta);
   const h = fontPx * 1.4;
   const cal = await getCalib();
+  // Every label box is as wide as the longest number, so Left and Right line the numbers up.
+  const longest = lay.items.reduce((m, hx) => Math.max(m, hx.key.length), 1);
+  const w = longest * fontPx * 0.8 + 8;
+  const align = ["LEFT", "RIGHT"].includes(cfg.align) ? cfg.align : "CENTER";
 
   const items = [];
   for (const hex of lay.items) {
     {
       const key = hex.key;
-      const w = key.length * fontPx * 0.8 + 8;
       const cx = cfg.anchor.x + hex.x + cfg.ox * dpi;
       const cy = cfg.anchor.y + hex.y + cfg.oy * dpi;
       const center = `${Math.round(cfg.anchor.x + hex.x)},${Math.round(cfg.anchor.y + hex.y)}`;
@@ -401,7 +405,7 @@ async function buildLabels(cfg, opts = {}) {
           .fontFamily(font.obr)
           .fontSize(fontPx)
           .fontWeight(cfg.bold ? 700 : 400)
-          .textAlign("CENTER")
+          .textAlign(align)
           .textAlignVertical("MIDDLE")
           .fillColor(cfg.fillColor)
           .fillOpacity(opts.anchor ? 0 : 1)

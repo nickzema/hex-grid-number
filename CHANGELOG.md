@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.1 - Steady placement
+Numbers no longer shift off-center when Owlbear's text measurement comes back wrong; a bad reading is retried and never kept.
+
 ## 0.9.0 - Optional numbers and opacity
 Players get a checkbox and their own toolbar button instead of SHOW/HIDE/OFF, the GM gets an eye, numbers are private per person, and a new opacity slider fades them.
 

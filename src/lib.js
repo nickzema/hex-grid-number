@@ -418,6 +418,7 @@ export const clearLocalLabels = () => clearFrom(OBR.scene.local);
 // Where a text item's box sits relative to its `position`, and what it rotates about,
 // measured with Owlbear's own bounds so labels land centered whatever the convention is.
 let calib = null;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function getCalib() {
   if (calib) return calib;
   const w = 100;
@@ -434,27 +435,35 @@ async function getCalib() {
       .locked(true)
       .disableHit(true)
       .build();
-  const a = probe(0);
-  const b = probe(90);
-  try {
-    await OBR.scene.local.addItems([a, b]);
-    const [ba, bb] = await Promise.all([OBR.scene.local.getItemBounds([a.id]), OBR.scene.local.getItemBounds([b.id])]);
-    const kx = ba.center.x / w;
-    const ky = ba.center.y / h;
-    if (Number.isFinite(kx) && Number.isFinite(ky)) {
-      // Rotated 90 degrees about the position the center moves to (-h*ky, w*kx);
-      // about the box center it stays at (w*kx, h*ky).
-      const dPos = Math.hypot(bb.center.x + h * ky, bb.center.y - w * kx);
-      const dCen = Math.hypot(bb.center.x - w * kx, bb.center.y - h * ky);
-      calib = { kx, ky, about: dCen < dPos ? "center" : "position" };
-    }
-  } catch (_) {
-    /* fall back below */
-  } finally {
+  // A reading only counts if Owlbear reports the box we asked for. A bad reading (zeros, not
+  // measured yet) is never kept: it is retried, and if it still fails the standard placement is
+  // used for now and measured again next time.
+  const sane = (b) =>
+    b && Math.abs(b.width - w) < 2 && Math.abs(b.height - h) < 2 && Number.isFinite(b.center.x) && Number.isFinite(b.center.y);
+  for (let attempt = 0; attempt < 3 && !calib; attempt++) {
+    const a = probe(0);
+    const b = probe(90);
     try {
-      await OBR.scene.local.deleteItems([a.id, b.id]);
+      await OBR.scene.local.addItems([a, b]);
+      if (attempt) await sleep(80 * attempt);
+      const [ba, bb] = await Promise.all([OBR.scene.local.getItemBounds([a.id]), OBR.scene.local.getItemBounds([b.id])]);
+      if (sane(ba)) {
+        const kx = ba.center.x / w;
+        const ky = ba.center.y / h;
+        // Rotated 90 degrees about the position the center moves to (-h*ky, w*kx);
+        // about the box center it stays at (w*kx, h*ky).
+        const dPos = Math.hypot(bb.center.x + h * ky, bb.center.y - w * kx);
+        const dCen = Math.hypot(bb.center.x - w * kx, bb.center.y - h * ky);
+        calib = { kx, ky, about: dCen < dPos ? "center" : "position" };
+      }
     } catch (_) {
-      /* already gone */
+      /* try again */
+    } finally {
+      try {
+        await OBR.scene.local.deleteItems([a.id, b.id]);
+      } catch (_) {
+        /* already gone */
+      }
     }
   }
   return calib || { kx: 0.5, ky: 0.5, about: "position" };
